@@ -5,6 +5,18 @@
 * pip install fastapi uvicorn
 * pip install pydantic python-dotenv sqlalchemy
 
+## How to create DB
+psql -U postgres -d postgres -f backend/db/00_create_db.sql
+psql -U postgres -d inkomoko_early_warning -f backend/db/01_schema.sql
+
+
+## Required env file
+
+* backend/.env:
+
+DATABASE_URL=postgresql+psycopg://postgres:YOUR_PASSWORD@localhost:5432/inkomoko_early_warning
+JWT_SECRET=dev-secret-change-me
+
 ## simple load
 uvicorn app.main:app --reload
 
