@@ -1,0 +1,99 @@
+# -----------------------------
+# Python / FastAPI backend
+# -----------------------------
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Conda
+.conda/
+conda-meta/
+# (optional) if someone accidentally commits env export files:
+*.conda.yml
+environment.yml
+
+# Pytest / coverage / reports
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+nosetests.xml
+*.cover
+*.py,cover
+
+# mypy / type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+
+# Ruff / pylint / other tooling
+.ruff_cache/
+.pylint.d/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Logs
+*.log
+logs/
+uvicorn.log
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# IDEs/editors
+.vscode/
+.idea/
+*.iml
+
+# -----------------------------
+# Secrets / local config
+# -----------------------------
+.env
+.env.*
+!.env.example
+
+# Local DB / dumps (if any)
+*.sqlite
+*.db
+*.dump
+*.sql.gz
+
+# -----------------------------
+# Cache folders
+# -----------------------------
+.cache/

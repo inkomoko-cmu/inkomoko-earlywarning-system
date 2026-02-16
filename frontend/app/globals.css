@@ -1,0 +1,19 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html, body {
+  height: 100%;
+}
+
+body {
+  @apply bg-inkomoko-bg text-inkomoko-text antialiased;
+}
+
+::selection {
+  background: rgba(240, 90, 40, 0.25);
+}
