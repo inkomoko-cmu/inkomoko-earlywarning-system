@@ -14,6 +14,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
     email = payload.email.lower().strip()
     user = await get_user_by_email(db, email)
+    print(f"Login attempt for email: {email}, user found: {user is not None}")
     if not user or not user.is_active:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
