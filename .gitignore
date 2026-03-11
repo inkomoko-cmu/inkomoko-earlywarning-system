@@ -2,3 +2,6 @@
 ml/artifacts/
 ml/charts/
 *.joblib
+
+# OS metadata files
+*:Zone.Identifier
