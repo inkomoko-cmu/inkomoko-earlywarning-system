@@ -1,0 +1,324 @@
+\documentclass[10pt]{beamer}
+
+\usetheme{Madrid}
+\usecolortheme{dolphin}
+\setbeamertemplate{navigation symbols}{}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{etoolbox}
+\graphicspath{{ml/prezi/charts}}
+
+\newcommand{\ModelPerformanceSection}{
+    \section{Current Model Performance}
+
+    \begin{frame}{Current Model Performance}
+        \begin{columns}[T]
+            \column{0.33\textwidth}
+            \centering
+            \textbf{Revenue}\\[0.3em]
+            \IfFileExists{revenue_model_performance.png}{
+                \includegraphics[width=\linewidth,height=0.58\textheight,keepaspectratio]{revenue_model_performance.png}
+            }{
+                \scriptsize Missing: \texttt{revenue\_model\_performance.png}
+            }
+
+            \column{0.33\textwidth}
+            \centering
+            \textbf{Employment}\\[0.3em]
+            \IfFileExists{../charts/employment_model_performance.png}{
+                \includegraphics[width=\linewidth,height=0.58\textheight,keepaspectratio]{employment_model_performance.png}
+            }{
+                \scriptsize Missing: \texttt{employment\_model\_performance.png}
+            }
+
+            \column{0.33\textwidth}
+            \centering
+            \textbf{Risk}\\[0.3em]
+            \IfFileExists{../charts/risk_model_performance.png}{
+                \includegraphics[width=\linewidth,height=0.58\textheight,keepaspectratio]{risk_model_performance.png}
+            }{
+                \scriptsize Missing: \texttt{risk\_model\_performance.png}
+            }
+        \end{columns}
+    \end{frame}
+}
+
+\usepackage{array}
+\usepackage{graphicx}
+\usepackage{tikz}
+\usepackage{hyperref}
+\usepackage{verbatim}
+
+\title{Inkomoko Early Warning System (ML)\\Progress Presentation}
+\author{Capstone Team}
+\institute{Semester 4 Simulations}
+\date{\today}
+
+\begin{document}
+
+\begin{frame}
+    \titlepage
+\end{frame}
+
+\begin{frame}{Agenda}
+    \tableofcontents
+\end{frame}
+
+\section{Project Overview}
+
+\begin{frame}{Project Goal}
+\begin{block}{Objective}
+Build a machine learning early-warning pipeline to monitor client business health and predict short-term risk and impact outcomes.
+\end{block}
+
+\begin{columns}[T]
+\column{0.52\textwidth}
+\textbf{Core ML Tracks}
+\begin{itemize}
+    \item Revenue prediction
+    \item Employment prediction
+    \item Risk scoring and tiering
+\end{itemize}
+
+\column{0.46\textwidth}
+\textbf{Expected Value}
+\begin{itemize}
+    \item Earlier intervention signals
+    \item Better portfolio monitoring
+    \item Data-driven support prioritization
+\end{itemize}
+\end{columns}
+\end{frame}
+
+\section{Current Repository Status}
+
+\begin{frame}{Repository Snapshot (Attached ML Folder)}
+\small
+\begin{tabularx}{\textwidth}{>{\bfseries}l X}
+Top-level scripts & \texttt{dummy\_data\_generation.py}, \texttt{requirements.txt} \\
+Model outputs & \texttt{artifacts/} with joblib models + metrics + predictions CSVs \\
+Experimentation & \texttt{notebooks/} for revenue, employment, risk, and RAG agent \\
+Documentation & \texttt{Docs/EMPLOYMENT DOC.md, REVENUE DOC.md, RISK DOC.md} \\
+Presentation assets & \texttt{prezi/prezi.tex} \\
+Synthetic data & \texttt{synthetic\_outputs/core\_banking\_loans.csv, impact\_data.csv}
+\end{tabularx}
+\end{frame}
+
+\begin{frame}{What Has Been Completed}
+\begin{itemize}
+    \item Synthetic data generation pipeline exists.
+    \item Separate notebooks created for each ML task:
+        \begin{itemize}
+            \item \texttt{revenue-pred-model.ipynb}
+            \item \texttt{employment-pred-model.ipynb}
+            \item \texttt{risk-model.ipynb}
+        \end{itemize}
+    \item Trained model artifacts exported to \texttt{artifacts/}.
+    \item Test predictions exported as CSV files.
+    \item Model metrics and summary files exported.
+    \item Domain documentation completed for all three tracks.
+\end{itemize}
+\end{frame}
+
+\section{Modeling Progress}
+
+\begin{frame}{Revenue Modeling Progress}
+\begin{block}{Evidence of Progress}
+\begin{itemize}
+    \item Notebook: \texttt{notebooks/revenue-pred-model.ipynb}
+    \item Metrics: \texttt{artifacts/revenue\_model\_metrics.csv}
+    \item Predictions: \texttt{artifacts/revenue\_predictions\_test.csv}
+\end{itemize}
+\end{block}
+
+\textbf{Current status:}
+\begin{itemize}
+    \item Baseline modeling and evaluation pipeline established.
+    \item Artifact export workflow is functional.
+    \item Ready for feature tuning and validation hardening.
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Employment Modeling Progress}
+\begin{block}{Evidence of Progress}
+\begin{itemize}
+    \item Notebook: \texttt{notebooks/employment-pred-model.ipynb}
+    \item Models:
+        \begin{itemize}
+            \item \texttt{employment\_jobs\_created\_3m\_model.joblib}
+            \item \texttt{employment\_jobs\_lost\_3m\_model.joblib}
+            \item \texttt{jobs\_created\_3m\_model.joblib}
+            \item \texttt{jobs\_lost\_3m\_model.joblib}
+        \end{itemize}
+    \item Metrics + predictions exported to CSV.
+\end{itemize}
+\end{block}
+\end{frame}
+
+\begin{frame}{Risk Modeling Progress}
+\begin{block}{Evidence of Progress}
+\begin{itemize}
+    \item Notebook: \texttt{notebooks/risk-model.ipynb}
+    \item Models:
+        \begin{itemize}
+            \item \texttt{risk\_score\_3m\_model.joblib}
+            \item \texttt{risk\_tier\_model.joblib}
+        \end{itemize}
+    \item Portfolio-level output:
+        \begin{itemize}
+            \item \texttt{segment\_summary.csv}
+            \item \texttt{model\_summary\_metrics.csv}
+            \item \texttt{predictions\_test.csv}
+        \end{itemize}
+\end{itemize}
+\end{block}
+\end{frame}
+
+\section{Data and Documentation}
+
+\begin{frame}{Data Assets Used}
+\begin{columns}[T]
+\column{0.52\textwidth}
+\textbf{Synthetic Outputs}
+\begin{itemize}
+    \item \texttt{core\_banking\_loans.csv}
+    \item \texttt{impact\_data.csv}
+\end{itemize}
+
+\textbf{Generation Script}
+\begin{itemize}
+    \item \texttt{dummy\_data\_generation.py}
+\end{itemize}
+
+\column{0.46\textwidth}
+\textbf{Purpose}
+\begin{itemize}
+    \item Enable modeling without production dependency
+    \item Support repeatable testing
+    \item Facilitate fast prototyping of features
+\end{itemize}
+\end{columns}
+\end{frame}
+
+\begin{frame}{Documentation Coverage}
+\small
+\begin{tabularx}{\textwidth}{>{\bfseries}l X}
+\toprule
+Document & Coverage \\
+\midrule
+\texttt{EMPLOYMENT DOC.md} & Employment target definitions, assumptions, and interpretation guide \\
+\texttt{REVENUE DOC.md} & Revenue prediction framing, features, and output usage \\
+\texttt{RISK DOC.md} & Risk score/tier design, segmentation, and warning interpretation \\
+\bottomrule
+\end{tabularx}
+
+\vspace{0.5em}
+\begin{block}{Progress Indicator}
+All three core model streams have documentation artifacts present and versioned.
+\end{block}
+\end{frame}
+
+\section{Quality, Gaps, and Next Steps}
+
+\begin{frame}{Current Strengths and Gaps}
+\begin{columns}[T]
+\column{0.49\textwidth}
+\textbf{Strengths}
+\begin{itemize}
+    \item End-to-end ML flow exists
+    \item Multi-target modeling implemented
+    \item Saved models + predictions + metrics
+    \item Track-specific documentation available
+\end{itemize}
+
+\column{0.49\textwidth}
+\textbf{Gaps}
+\begin{itemize}
+    \item Centralized training pipeline/script not yet explicit
+    \item Cross-model dashboarding not yet integrated
+    \item Threshold calibration and drift checks pending
+    \item Deployment packaging not yet shown in repo
+\end{itemize}
+\end{columns}
+\end{frame}
+
+\begin{frame}{Planned Milestones (Next Sprint)}
+\begin{enumerate}
+    \item Consolidate notebooks into reusable training/inference scripts.
+    \item Standardize feature preprocessing and model versioning.
+    \item Compare model families and tune top performers.
+    \item Define early-warning thresholds and intervention rules.
+    \item Build one reporting layer (CSV-to-dashboard/API-ready output).
+    \item Add validation checks: data quality, leakage guardrails, drift baseline.
+\end{enumerate}
+\end{frame}
+
+\begin{frame}{Requested Decisions / Support}
+\begin{itemize}
+    \item Confirm success criteria per track (revenue, employment, risk).
+    \item Approve early-warning threshold framework.
+    \item Confirm preferred deployment target (batch pipeline vs API).
+    \item Validate priority user stories for intervention workflows.
+\end{itemize}
+\end{frame}
+
+\ModelPerformanceSection
+
+\section{Appendix}
+
+\begin{frame}[fragile]{Attached File Inventory (As Provided)}
+\scriptsize
+\begin{verbatim}
+dummy_data_generation.py
+requirements.txt
+.ipynb_checkpoints/
+    requirements-checkpoint.txt
+artifacts/
+    employment_jobs_created_3m_model.joblib
+    employment_jobs_lost_3m_model.joblib
+    employment_model_metrics.csv
+    employment_predictions_test.csv
+    jobs_created_3m_model.joblib
+    jobs_lost_3m_model.joblib
+    model_summary_metrics.csv
+    predictions_test.csv
+    revenue_model_metrics.csv
+    revenue_predictions_test.csv
+    risk_score_3m_model.joblib
+    risk_tier_model.joblib
+    segment_summary.csv
+charts/
+Docs/
+    EMPLOYMENT DOC.md
+    REVENUE DOC.md
+    RISK DOC.md
+notebooks/
+    employment-pred-model.ipynb
+    rag-agent.ipynb
+    revenue-pred-model.ipynb
+    risk-model.ipynb
+    .ipynb_checkpoints/
+        employment-pred-model-checkpoint.ipynb
+        revenue-pred-model-checkpoint.ipynb
+    ml/
+        artifacts/
+prezi/
+    prezi.tex
+synthetic_outputs/
+    core_banking_loans.csv
+    impact_data.csv
+\end{verbatim}
+\end{frame}
+
+\begin{frame}
+\centering
+\Large Thank you
+\vspace{0.4em}
+
+\normalsize Questions and feedback.
+\end{frame}
+
+\end{document}

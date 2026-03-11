@@ -1,0 +1,7 @@
+\beamer@sectionintoc {1}{Project Overview}{3}{0}{1}
+\beamer@sectionintoc {2}{Current Repository Status}{4}{0}{2}
+\beamer@sectionintoc {3}{Modeling Progress}{6}{0}{3}
+\beamer@sectionintoc {4}{Data and Documentation}{9}{0}{4}
+\beamer@sectionintoc {5}{Quality, Gaps, and Next Steps}{11}{0}{5}
+\beamer@sectionintoc {6}{Current Model Performance}{14}{0}{6}
+\beamer@sectionintoc {7}{Appendix}{15}{0}{7}

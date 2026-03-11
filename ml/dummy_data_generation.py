@@ -50,8 +50,23 @@ COUNTRIES = [
 COUNTRY_PROVINCES_DISTRICTS = {
     "RW": {
         "provinces": ["Kigali City", "Eastern", "Northern", "Southern", "Western"],
-        "districts": ["Gasabo", "Kicukiro", "Nyarugenge", "Rwamagana", "Musanze", "Huye", "Rubavu"],
-        "locations": ["Gasabo", "Kicukiro", "Nyarugenge", "Mahama Camp", "Kigeme Camp", "Nyabiheke Camp"],
+        "districts": [
+            "Gasabo",
+            "Kicukiro",
+            "Nyarugenge",
+            "Rwamagana",
+            "Musanze",
+            "Huye",
+            "Rubavu",
+        ],
+        "locations": [
+            "Gasabo",
+            "Kicukiro",
+            "Nyarugenge",
+            "Mahama Camp",
+            "Kigeme Camp",
+            "Nyabiheke Camp",
+        ],
         "nationalities": ["Rwandan", "Congolese", "Burundian"],
         "currency": "RWF",
     },
@@ -78,7 +93,15 @@ COUNTRY_PROVINCES_DISTRICTS = {
     },
 }
 
-EDUCATION_LEVELS = ["None", "Primary", "Secondary", "TVET", "Diploma", "Bachelor", "Postgraduate"]
+EDUCATION_LEVELS = [
+    "None",
+    "Primary",
+    "Secondary",
+    "TVET",
+    "Diploma",
+    "Bachelor",
+    "Postgraduate",
+]
 BUSINESS_SECTORS = [
     "Retail & Trade",
     "Hospitality and Tourism",
@@ -102,8 +125,21 @@ SUBSECTORS = {
     "ICT": ["Cybercafe", "Mobile Money", "Device Repair", "Software Services"],
 }
 
-LOAN_TYPES = ["Working Capital", "Asset Finance", "Inventory Loan", "Emergency Loan", "Seasonal Loan"]
-PURPOSES = ["Stock purchase", "Equipment", "Expansion", "Working capital", "Rent/Utilities", "Emergency"]
+LOAN_TYPES = [
+    "Working Capital",
+    "Asset Finance",
+    "Inventory Loan",
+    "Emergency Loan",
+    "Seasonal Loan",
+]
+PURPOSES = [
+    "Stock purchase",
+    "Equipment",
+    "Expansion",
+    "Working capital",
+    "Rent/Utilities",
+    "Emergency",
+]
 LOAN_STATUS = ["active", "closed", "defaulted", "restructured"]
 STRATA = ["host", "refugee"]
 
@@ -115,18 +151,23 @@ def set_seeds(seed: int = 42) -> None:
     random.seed(seed)
     np.random.seed(seed)
 
+
 def rand_choice(xs: List[str]) -> str:
     return xs[random.randint(0, len(xs) - 1)]
 
+
 def clip(x: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, x))
+
 
 def date_between(start: date, end: date) -> date:
     delta = (end - start).days
     return start + timedelta(days=random.randint(0, max(0, delta)))
 
+
 def sigmoid(z: float) -> float:
     return 1.0 / (1.0 + math.exp(-z))
+
 
 def risk_tier_from_score(s: float) -> str:
     # score 0..1
@@ -170,7 +211,9 @@ def generate_impact_data(n: int, fake: Faker) -> pd.DataFrame:
         nationality = rand_choice(country_meta["nationalities"])
 
         business_sector = random.choices(
-            BUSINESS_SECTORS, weights=[0.22, 0.10, 0.15, 0.14, 0.08, 0.08, 0.06, 0.12, 0.05], k=1
+            BUSINESS_SECTORS,
+            weights=[0.22, 0.10, 0.15, 0.14, 0.08, 0.08, 0.06, 0.12, 0.05],
+            k=1,
         )[0]
 
         # existing vs idea stage (your dictionary notes different fields) :contentReference[oaicite:5]{index=5}
@@ -195,8 +238,12 @@ def generate_impact_data(n: int, fake: Faker) -> pd.DataFrame:
         strata_multiplier = 0.92 if strata == "refugee" else 1.0
 
         # baseline revenue (monthly), lognormal-like
-        base_rev = np.random.lognormal(mean=8.2, sigma=0.55)  # large-ish; we'll scale down
-        revenue = float(base_rev * 0.12 * sector_multiplier * strata_multiplier)  # yields realistic 50..5000 range
+        base_rev = np.random.lognormal(
+            mean=8.2, sigma=0.55
+        )  # large-ish; we'll scale down
+        revenue = float(
+            base_rev * 0.12 * sector_multiplier * strata_multiplier
+        )  # yields realistic 50..5000 range
         revenue = clip(revenue, 25, 10_000)
 
         # household expense (existing only)
@@ -208,7 +255,9 @@ def generate_impact_data(n: int, fake: Faker) -> pd.DataFrame:
         # customers per month (existing only)
         monthly_customer = None
         if is_existing:
-            monthly_customer = int(clip(np.random.lognormal(mean=3.2, sigma=0.55), 5, 1500))
+            monthly_customer = int(
+                clip(np.random.lognormal(mean=3.2, sigma=0.55), 5, 1500)
+            )
 
         # registrations + finance access (existing only)
         business_location = None
@@ -223,16 +272,36 @@ def generate_impact_data(n: int, fake: Faker) -> pd.DataFrame:
 
         if is_existing:
             business_location = rand_choice(country_meta["districts"])
-            is_business_registered = random.choices(["Yes", "No"], weights=[0.55, 0.45], k=1)[0]
-            have_bank_account = random.choices(["Yes", "No"], weights=[0.62, 0.38], k=1)[0]
-            has_access_to_finance_in_past_6months = random.choices(["Yes", "No"], weights=[0.45, 0.55], k=1)[0]
-            kept_sales_record = random.choices(["Yes", "No"], weights=[0.50, 0.50], k=1)[0]
+            is_business_registered = random.choices(
+                ["Yes", "No"], weights=[0.55, 0.45], k=1
+            )[0]
+            have_bank_account = random.choices(
+                ["Yes", "No"], weights=[0.62, 0.38], k=1
+            )[0]
+            has_access_to_finance_in_past_6months = random.choices(
+                ["Yes", "No"], weights=[0.45, 0.55], k=1
+            )[0]
+            kept_sales_record = random.choices(
+                ["Yes", "No"], weights=[0.50, 0.50], k=1
+            )[0]
 
-            bz_have_new_practices = random.choices(["Yes", "No"], weights=[0.40, 0.60], k=1)[0]
+            bz_have_new_practices = random.choices(
+                ["Yes", "No"], weights=[0.40, 0.60], k=1
+            )[0]
             if bz_have_new_practices == "Yes":
-                practice_type = rand_choice(["Record keeping", "Pricing", "Inventory", "Marketing", "Supplier diversification"])
+                practice_type = rand_choice(
+                    [
+                        "Record keeping",
+                        "Pricing",
+                        "Inventory",
+                        "Marketing",
+                        "Supplier diversification",
+                    ]
+                )
 
-            bz_have_new_product = random.choices(["Yes", "No"], weights=[0.35, 0.65], k=1)[0]
+            bz_have_new_product = random.choices(
+                ["Yes", "No"], weights=[0.35, 0.65], k=1
+            )[0]
             if bz_have_new_product == "Yes":
                 new_product_type = rand_choice(SUBSECTORS[business_sector])
 
@@ -262,15 +331,45 @@ def generate_impact_data(n: int, fake: Faker) -> pd.DataFrame:
         plan_after_program = None
 
         if not is_existing:
-            has_started_business = random.random() < 0.35  # some idea-stage later start; still treat as idea-stage record
+            has_started_business = (
+                random.random() < 0.35
+            )  # some idea-stage later start; still treat as idea-stage record
             if not has_started_business:
-                why_not_started_business = rand_choice(["Lack of capital", "Market uncertainty", "Family responsibilities", "Health issues", "Permit/registration barriers"])
-            bz_source_capital = rand_choice(["Savings", "Family support", "Loan", "Grant", "Community group"])
+                why_not_started_business = rand_choice(
+                    [
+                        "Lack of capital",
+                        "Market uncertainty",
+                        "Family responsibilities",
+                        "Health issues",
+                        "Permit/registration barriers",
+                    ]
+                )
+            bz_source_capital = rand_choice(
+                ["Savings", "Family support", "Loan", "Grant", "Community group"]
+            )
             did_you_buy_assets_in_the_past_6months = bool(random.random() < 0.32)
-            business_challenges = rand_choice(["Low demand", "Competition", "High input costs", "Security constraints", "Limited mobility"])
+            business_challenges = rand_choice(
+                [
+                    "Low demand",
+                    "Competition",
+                    "High input costs",
+                    "Security constraints",
+                    "Limited mobility",
+                ]
+            )
             did_you_attended_all_training = bool(random.random() < 0.72)
-            does_training_increased_bz_skills = bool(did_you_attended_all_training and (random.random() < 0.80))
-            plan_after_program = rand_choice(["Start business", "Expand idea", "Seek employment", "Continue training", "Join cooperative"])
+            does_training_increased_bz_skills = bool(
+                did_you_attended_all_training and (random.random() < 0.80)
+            )
+            plan_after_program = rand_choice(
+                [
+                    "Start business",
+                    "Expand idea",
+                    "Seek employment",
+                    "Continue training",
+                    "Join cooperative",
+                ]
+            )
 
         # 3-month lead-time targets (for training your predictive suite)
         # We'll create a probabilistic "distress score" based on:
@@ -278,7 +377,9 @@ def generate_impact_data(n: int, fake: Faker) -> pd.DataFrame:
         # - plus randomness to avoid leakage
         finance_penalty = 0.0
         if is_existing:
-            finance_penalty += 0.35 if has_access_to_finance_in_past_6months == "No" else -0.05
+            finance_penalty += (
+                0.35 if has_access_to_finance_in_past_6months == "No" else -0.05
+            )
             finance_penalty += 0.25 if kept_sales_record == "No" else -0.05
 
         z = (
@@ -287,24 +388,82 @@ def generate_impact_data(n: int, fake: Faker) -> pd.DataFrame:
             + (0.25 if only_income_earner == "Yes" else 0.0)
             + (0.10 * (number_of_people_responsible - 3))
             + finance_penalty
-            + (0.65 * (1.0 - min(revenue / 3500.0, 1.0)))  # lower revenue => higher risk
+            + (
+                0.65 * (1.0 - min(revenue / 3500.0, 1.0))
+            )  # lower revenue => higher risk
             + np.random.normal(0, 0.35)
         )
         distress_prob = sigmoid(z)  # 0..1
 
         risk_tier = risk_tier_from_score(distress_prob)
 
-        # Forecasts: jobs created/lost and revenue (3m) correlated with risk
-        # Revenue_3m: growth if low risk, flat if medium, decline if high
-        growth_factor = {
+        # Forecasts: jobs created/lost and revenue (month-by-month over 3m) correlated with risk
+        # Revenue monthly: growth if low risk, flat if medium, decline if high
+        # Month 1 is a fraction of overall trajectory, month 2 intermediate, month 3 full horizon
+        growth_factor_3m = {
             "LOW": random.uniform(1.05, 1.35),
             "MEDIUM": random.uniform(0.90, 1.12),
             "HIGH": random.uniform(0.55, 0.95),
         }[risk_tier]
-        revenue_3m = float(clip(revenue * growth_factor, 10, 15_000))
 
-        jobs_created_3m = int(clip(job_created + np.random.poisson(0.4 if risk_tier == "LOW" else 0.2), 0, 35))
-        jobs_lost_3m = int(clip(np.random.poisson(0.2 if risk_tier == "LOW" else 0.8 if risk_tier == "HIGH" else 0.4), 0, 25))
+        # Monthly revenue with progressive trajectory + noise
+        rev_1m = float(
+            clip(
+                revenue
+                * (1.0 + (growth_factor_3m - 1.0) * 0.33)
+                * random.uniform(0.92, 1.08),
+                10,
+                15_000,
+            )
+        )
+        rev_2m = float(
+            clip(
+                revenue
+                * (1.0 + (growth_factor_3m - 1.0) * 0.66)
+                * random.uniform(0.92, 1.08),
+                10,
+                15_000,
+            )
+        )
+        rev_3m = float(
+            clip(revenue * growth_factor_3m * random.uniform(0.92, 1.08), 10, 15_000)
+        )
+
+        # Monthly jobs created: accumulating over the 3 month window
+        jc_base = 0.4 if risk_tier == "LOW" else 0.2
+        jobs_created_1m = int(clip(np.random.poisson(jc_base * 0.4), 0, 15))
+        jobs_created_2m = int(
+            clip(jobs_created_1m + np.random.poisson(jc_base * 0.3), 0, 25)
+        )
+        jobs_created_3m = int(
+            clip(jobs_created_2m + np.random.poisson(jc_base * 0.3), 0, 35)
+        )
+
+        # Monthly jobs lost
+        jl_lambda = 0.2 if risk_tier == "LOW" else 0.8 if risk_tier == "HIGH" else 0.4
+        jobs_lost_1m = int(clip(np.random.poisson(jl_lambda * 0.35), 0, 10))
+        jobs_lost_2m = int(
+            clip(jobs_lost_1m + np.random.poisson(jl_lambda * 0.30), 0, 20)
+        )
+        jobs_lost_3m = int(
+            clip(jobs_lost_2m + np.random.poisson(jl_lambda * 0.35), 0, 25)
+        )
+
+        # Monthly risk score: distress can evolve over the 3 months
+        risk_noise_1 = np.random.normal(0, 0.05)
+        risk_noise_2 = np.random.normal(0, 0.05)
+        risk_score_1m = float(clip(distress_prob + risk_noise_1 * 0.5, 0, 1))
+        risk_score_2m = float(
+            clip(distress_prob + risk_noise_1 + risk_noise_2 * 0.5, 0, 1)
+        )
+        risk_score_3m_val = float(
+            clip(distress_prob + risk_noise_1 + risk_noise_2, 0, 1)
+        )
+
+        # Monthly risk tier derived from monthly score
+        risk_tier_1m = risk_tier_from_score(risk_score_1m)
+        risk_tier_2m = risk_tier_from_score(risk_score_2m)
+        risk_tier_3m_val = risk_tier_from_score(risk_score_3m_val)
 
         rows.append(
             dict(
@@ -312,7 +471,6 @@ def generate_impact_data(n: int, fake: Faker) -> pd.DataFrame:
                 unique_id=unique_id,
                 survey_id=survey_id,
                 survey_date=str(survey_date),
-
                 # demographics
                 age=age,
                 gender=gender,
@@ -320,13 +478,11 @@ def generate_impact_data(n: int, fake: Faker) -> pd.DataFrame:
                 client_location=client_location,
                 nationality=nationality,
                 education_level=education_level,
-
                 # business
                 business_sector=business_sector,
                 business_sub_sector=rand_choice(SUBSECTORS[business_sector]),
                 only_income_earner=only_income_earner,
                 number_of_people_reponsible=number_of_people_responsible,
-
                 business_location=business_location,
                 is_business_registered=is_business_registered,
                 has_access_to_finance_in_past_6months=has_access_to_finance_in_past_6months,
@@ -337,12 +493,10 @@ def generate_impact_data(n: int, fake: Faker) -> pd.DataFrame:
                 practice_type=practice_type,
                 bz_have_new_product=bz_have_new_product,
                 new_product_type=new_product_type,
-
                 # outcomes
                 job_created=job_created,
                 revenue=round(revenue, 2),
                 hh_expense=(round(hh_expense, 2) if hh_expense is not None else None),
-
                 # satisfaction/NPS
                 nps_detractor=nps_detractor,
                 nps_passive=nps_passive,
@@ -350,7 +504,6 @@ def generate_impact_data(n: int, fake: Faker) -> pd.DataFrame:
                 satisfied_yes=satisfied_yes,
                 satisfied_no=satisfied_no,
                 survey_name=survey_name,
-
                 # idea stage
                 has_started_business=has_started_business,
                 why_not_started_business=why_not_started_business,
@@ -360,14 +513,22 @@ def generate_impact_data(n: int, fake: Faker) -> pd.DataFrame:
                 did_you_attended_all_training=did_you_attended_all_training,
                 does_training_increased_bz_skills=does_training_increased_bz_skills,
                 plan_after_program=plan_after_program,
-
-                # for ML training (3-month horizon targets)
-                risk_tier_3m=risk_tier,
-                risk_score_3m=round(float(distress_prob), 6),
+                # for ML training (monthly horizon targets)
+                risk_tier_1m=risk_tier_1m,
+                risk_tier_2m=risk_tier_2m,
+                risk_tier_3m=risk_tier_3m_val,
+                risk_score_1m=round(float(risk_score_1m), 6),
+                risk_score_2m=round(float(risk_score_2m), 6),
+                risk_score_3m=round(float(risk_score_3m_val), 6),
+                jobs_created_1m=jobs_created_1m,
+                jobs_created_2m=jobs_created_2m,
                 jobs_created_3m=jobs_created_3m,
+                jobs_lost_1m=jobs_lost_1m,
+                jobs_lost_2m=jobs_lost_2m,
                 jobs_lost_3m=jobs_lost_3m,
-                revenue_3m=round(revenue_3m, 2),
-
+                revenue_1m=round(rev_1m, 2),
+                revenue_2m=round(rev_2m, 2),
+                revenue_3m=round(rev_3m, 2),
                 # extra
                 countrySpecific=cname,  # mirrors the banking dictionary style :contentReference[oaicite:8]{index=8}
                 country_code=cc,
@@ -381,7 +542,9 @@ def generate_impact_data(n: int, fake: Faker) -> pd.DataFrame:
 # Synthetic Core Banking Dataset
 # Based on fields listed in Core Banking data dictionary :contentReference[oaicite:9]{index=9}
 # -----------------------------
-def generate_core_banking_data(n: int, impact_df: pd.DataFrame, fake: Faker) -> pd.DataFrame:
+def generate_core_banking_data(
+    n: int, impact_df: pd.DataFrame, fake: Faker
+) -> pd.DataFrame:
     rows: List[Dict] = []
 
     # Create a bank clientId derived from the impact composite key
@@ -403,7 +566,9 @@ def generate_core_banking_data(n: int, impact_df: pd.DataFrame, fake: Faker) -> 
         jitter_days = random.randint(-120, 120)
         return d - timedelta(days=int(age * 365.25) + jitter_days)
 
-    impact_df["dateOfBirth"] = impact_df.apply(lambda r: compute_dob(r["survey_date"], int(r["age"])), axis=1)
+    impact_df["dateOfBirth"] = impact_df.apply(
+        lambda r: compute_dob(r["survey_date"], int(r["age"])), axis=1
+    )
 
     sample_idx = np.random.choice(impact_df.index.values, size=n, replace=True)
 
@@ -431,9 +596,19 @@ def generate_core_banking_data(n: int, impact_df: pd.DataFrame, fake: Faker) -> 
 
         # Amounts correlated with revenue: higher revenue -> higher amounts
         rev = float(r["revenue"])
-        appliedAmount = float(clip(np.random.normal(loc=rev * 0.9, scale=max(50.0, rev * 0.35)), 100, 25_000))
-        approvedAmount = float(clip(appliedAmount * random.uniform(0.75, 1.05), 100, 25_000))
-        disbursedAmount = float(clip(approvedAmount * random.uniform(0.90, 1.00), 80, 25_000))
+        appliedAmount = float(
+            clip(
+                np.random.normal(loc=rev * 0.9, scale=max(50.0, rev * 0.35)),
+                100,
+                25_000,
+            )
+        )
+        approvedAmount = float(
+            clip(appliedAmount * random.uniform(0.75, 1.05), 100, 25_000)
+        )
+        disbursedAmount = float(
+            clip(approvedAmount * random.uniform(0.90, 1.00), 80, 25_000)
+        )
 
         termsDuration = int(random.choice([3, 6, 9, 12, 18, 24]))
 
@@ -443,30 +618,36 @@ def generate_core_banking_data(n: int, impact_df: pd.DataFrame, fake: Faker) -> 
         status = random.choices(
             LOAN_STATUS,
             weights=[
-                0.62 if risk != "HIGH" else 0.45,    # active
-                0.25 if risk == "LOW" else 0.18,     # closed
+                0.62 if risk != "HIGH" else 0.45,  # active
+                0.25 if risk == "LOW" else 0.18,  # closed
                 0.08 if risk == "MEDIUM" else 0.22,  # defaulted
-                0.05,                                 # restructured
+                0.05,  # restructured
             ],
-            k=1
+            k=1,
         )[0]
 
         # If defaulted, higher arrears
         daysInArrears = 0
         installmentInArrears = 0
         if status in ("defaulted", "restructured"):
-            daysInArrears = int(clip(np.random.normal(60 if status == "defaulted" else 30, 20), 1, 360))
+            daysInArrears = int(
+                clip(np.random.normal(60 if status == "defaulted" else 30, 20), 1, 360)
+            )
             installmentInArrears = int(clip(np.random.poisson(2) + 1, 1, 12))
         else:
             # maybe small arrears sometimes
-            if random.random() < (0.08 if risk == "LOW" else 0.15 if risk == "MEDIUM" else 0.22):
+            if random.random() < (
+                0.08 if risk == "LOW" else 0.15 if risk == "MEDIUM" else 0.22
+            ):
                 daysInArrears = int(clip(np.random.normal(10, 6), 1, 45))
                 installmentInArrears = int(clip(np.random.poisson(1) + 1, 1, 4))
 
         # Balances and paid amounts
         # simulate outstanding balance as a fraction based on status and time
         principal = disbursedAmount
-        interest_total = principal * random.uniform(0.08, 0.30)  # total interest across term
+        interest_total = principal * random.uniform(
+            0.08, 0.30
+        )  # total interest across term
         fees_total = principal * random.uniform(0.01, 0.05)
         insurance_total = principal * random.uniform(0.00, 0.02)
 
@@ -480,38 +661,148 @@ def generate_core_banking_data(n: int, impact_df: pd.DataFrame, fake: Faker) -> 
         else:  # defaulted
             paid_frac = random.uniform(0.05, 0.35)
 
-        total_paid = float(clip((principal + interest_total + fees_total + insurance_total) * paid_frac, 0, 40_000))
-        principalPaid = float(clip(principal * paid_frac * random.uniform(0.85, 1.05), 0, principal))
-        interestPaid = float(clip(interest_total * paid_frac * random.uniform(0.75, 1.10), 0, interest_total))
+        total_paid = float(
+            clip(
+                (principal + interest_total + fees_total + insurance_total) * paid_frac,
+                0,
+                40_000,
+            )
+        )
+        principalPaid = float(
+            clip(principal * paid_frac * random.uniform(0.85, 1.05), 0, principal)
+        )
+        interestPaid = float(
+            clip(
+                interest_total * paid_frac * random.uniform(0.75, 1.10),
+                0,
+                interest_total,
+            )
+        )
         insuranceFeePaid = float(clip(insurance_total * paid_frac, 0, insurance_total))
-        totalLateFeesPaid = float(clip((fees_total * random.uniform(0.1, 0.8)) if daysInArrears > 0 else 0.0, 0, 5000))
-        excessAmountPaid = float(clip(total_paid - (principalPaid + interestPaid + insuranceFeePaid + totalLateFeesPaid), 0, 5000))
-        interestWaived = float(clip((interest_total * random.uniform(0.0, 0.15)) if status == "restructured" else 0.0, 0, 5000))
+        totalLateFeesPaid = float(
+            clip(
+                (fees_total * random.uniform(0.1, 0.8)) if daysInArrears > 0 else 0.0,
+                0,
+                5000,
+            )
+        )
+        excessAmountPaid = float(
+            clip(
+                total_paid
+                - (principalPaid + interestPaid + insuranceFeePaid + totalLateFeesPaid),
+                0,
+                5000,
+            )
+        )
+        interestWaived = float(
+            clip(
+                (
+                    (interest_total * random.uniform(0.0, 0.15))
+                    if status == "restructured"
+                    else 0.0
+                ),
+                0,
+                5000,
+            )
+        )
 
-        currentBalance = float(clip((principal + interest_total + fees_total + insurance_total) - total_paid, 0, 50_000))
+        currentBalance = float(
+            clip(
+                (principal + interest_total + fees_total + insurance_total)
+                - total_paid,
+                0,
+                50_000,
+            )
+        )
         principalBalance = float(clip(principal - principalPaid, 0, principal))
-        interestBalance = float(clip(interest_total - interestPaid - interestWaived, 0, interest_total))
+        interestBalance = float(
+            clip(interest_total - interestPaid - interestWaived, 0, interest_total)
+        )
         feesBalance = float(clip(fees_total - totalLateFeesPaid, 0, fees_total))
 
-        amountPastDue = float(clip(currentBalance * (0.15 if daysInArrears > 0 else 0.0), 0, 25_000))
-        principalPastDue = float(clip(principalBalance * (0.10 if daysInArrears > 0 else 0.0), 0, 25_000))
-        interestPastDue = float(clip(interestBalance * (0.10 if daysInArrears > 0 else 0.0), 0, 25_000))
-        feesPastDue = float(clip(feesBalance * (0.10 if daysInArrears > 0 else 0.0), 0, 25_000))
+        amountPastDue = float(
+            clip(currentBalance * (0.15 if daysInArrears > 0 else 0.0), 0, 25_000)
+        )
+        principalPastDue = float(
+            clip(principalBalance * (0.10 if daysInArrears > 0 else 0.0), 0, 25_000)
+        )
+        interestPastDue = float(
+            clip(interestBalance * (0.10 if daysInArrears > 0 else 0.0), 0, 25_000)
+        )
+        feesPastDue = float(
+            clip(feesBalance * (0.10 if daysInArrears > 0 else 0.0), 0, 25_000)
+        )
 
         # Scheduled installment amounts
-        scheduledPrincipalAmount = float(clip(principal / max(1, termsDuration), 10, 10_000))
-        scheduledInterestAmount = float(clip(interest_total / max(1, termsDuration), 1, 5000))
+        scheduledPrincipalAmount = float(
+            clip(principal / max(1, termsDuration), 10, 10_000)
+        )
+        scheduledInterestAmount = float(
+            clip(interest_total / max(1, termsDuration), 1, 5000)
+        )
         scheduledFeesAmount = float(clip(fees_total / max(1, termsDuration), 0, 2000))
-        scheduledPaymentAmount = float(scheduledPrincipalAmount + scheduledInterestAmount + scheduledFeesAmount)
+        scheduledPaymentAmount = float(
+            scheduledPrincipalAmount + scheduledInterestAmount + scheduledFeesAmount
+        )
 
         # Last payment
-        lastPaymentDate = disbursementDate + timedelta(days=random.randint(15, 30) * random.randint(1, min(termsDuration, 8)))
-        lastPaymentAmount = float(clip(np.random.normal(loc=scheduledPaymentAmount, scale=scheduledPaymentAmount * 0.25), 0, 20_000))
-        lastPrincipalAmount = float(clip(lastPaymentAmount * random.uniform(0.55, 0.85), 0, scheduledPrincipalAmount * 3))
-        lastInterestAmount = float(clip(lastPaymentAmount * random.uniform(0.10, 0.35), 0, scheduledInterestAmount * 3))
-        lastFeesAmount = float(clip(lastPaymentAmount * random.uniform(0.00, 0.10), 0, scheduledFeesAmount * 3))
-        lastLateFeesAmount = float(clip(lastPaymentAmount * random.uniform(0.00, 0.05) if daysInArrears > 0 else 0.0, 0, 500))
-        lastExcessAmount = float(clip(lastPaymentAmount - (lastPrincipalAmount + lastInterestAmount + lastFeesAmount + lastLateFeesAmount), 0, 5000))
+        lastPaymentDate = disbursementDate + timedelta(
+            days=random.randint(15, 30) * random.randint(1, min(termsDuration, 8))
+        )
+        lastPaymentAmount = float(
+            clip(
+                np.random.normal(
+                    loc=scheduledPaymentAmount, scale=scheduledPaymentAmount * 0.25
+                ),
+                0,
+                20_000,
+            )
+        )
+        lastPrincipalAmount = float(
+            clip(
+                lastPaymentAmount * random.uniform(0.55, 0.85),
+                0,
+                scheduledPrincipalAmount * 3,
+            )
+        )
+        lastInterestAmount = float(
+            clip(
+                lastPaymentAmount * random.uniform(0.10, 0.35),
+                0,
+                scheduledInterestAmount * 3,
+            )
+        )
+        lastFeesAmount = float(
+            clip(
+                lastPaymentAmount * random.uniform(0.00, 0.10),
+                0,
+                scheduledFeesAmount * 3,
+            )
+        )
+        lastLateFeesAmount = float(
+            clip(
+                (
+                    lastPaymentAmount * random.uniform(0.00, 0.05)
+                    if daysInArrears > 0
+                    else 0.0
+                ),
+                0,
+                500,
+            )
+        )
+        lastExcessAmount = float(
+            clip(
+                lastPaymentAmount
+                - (
+                    lastPrincipalAmount
+                    + lastInterestAmount
+                    + lastFeesAmount
+                    + lastLateFeesAmount
+                ),
+                0,
+                5000,
+            )
+        )
 
         loanNumber = f"LN-{cc}-{base_year}-{random.randint(100000, 999999)}"
 
@@ -528,13 +819,11 @@ def generate_core_banking_data(n: int, impact_df: pd.DataFrame, fake: Faker) -> 
                 submissionDate=str(submissionDate),
                 approvalDate=str(approvalDate),
                 disbursementDate=str(disbursementDate),
-
                 appliedAmount=round(appliedAmount, 2),
                 approvedAmount=round(approvedAmount, 2),
                 disbursedAmount=round(disbursedAmount, 2),
                 loanType=loanType,
                 termsDuration=termsDuration,
-
                 actualPaymentAmount=round(total_paid, 2),
                 principalPaid=round(principalPaid, 2),
                 interestPaid=round(interestPaid, 2),
@@ -542,34 +831,28 @@ def generate_core_banking_data(n: int, impact_df: pd.DataFrame, fake: Faker) -> 
                 totalLateFeesPaid=round(totalLateFeesPaid, 2),
                 excessAmountPaid=round(excessAmountPaid, 2),
                 interestWaived=round(interestWaived, 2),
-
                 currentBalance=round(currentBalance, 2),
                 principalBalance=round(principalBalance, 2),
                 interestBalance=round(interestBalance, 2),
                 feesBalance=round(feesBalance, 2),
-
                 amountPastDue=round(amountPastDue, 2),
                 principalPastDue=round(principalPastDue, 2),
                 interestPastDue=round(interestPastDue, 2),
                 feesPastDue=round(feesPastDue, 2),
-
                 scheduledPrincipalAmount=round(scheduledPrincipalAmount, 2),
                 scheduledInterestAmount=round(scheduledInterestAmount, 2),
                 scheduledFeesAmount=round(scheduledFeesAmount, 2),
                 scheduledPaymentAmount=round(scheduledPaymentAmount, 2),
-
                 lastPaymentAmount=round(lastPaymentAmount, 2),
                 lastPrincipalAmount=round(lastPrincipalAmount, 2),
                 lastInterestAmount=round(lastInterestAmount, 2),
                 lastFeesAmount=round(lastFeesAmount, 2),
                 lastLateFeesAmount=round(lastLateFeesAmount, 2),
                 lastExcessAmount=round(lastExcessAmount, 2),
-
                 daysInArrears=daysInArrears,
                 installmentInArrears=installmentInArrears,
                 lastPaymentDate=str(lastPaymentDate),
                 loanStatus=status,
-
                 industrySectorOfActivity=r["business_sector"],
                 businessSubSector=r["business_sub_sector"],
                 countrySpecific=r["countrySpecific"],

@@ -1,0 +1,42 @@
+\frametitle{Attached File Inventory (As Provided)}
+\scriptsize
+\begin{verbatim}
+dummy_data_generation.py
+requirements.txt
+.ipynb_checkpoints/
+    requirements-checkpoint.txt
+artifacts/
+    employment_jobs_created_3m_model.joblib
+    employment_jobs_lost_3m_model.joblib
+    employment_model_metrics.csv
+    employment_predictions_test.csv
+    jobs_created_3m_model.joblib
+    jobs_lost_3m_model.joblib
+    model_summary_metrics.csv
+    predictions_test.csv
+    revenue_model_metrics.csv
+    revenue_predictions_test.csv
+    risk_score_3m_model.joblib
+    risk_tier_model.joblib
+    segment_summary.csv
+charts/
+Docs/
+    EMPLOYMENT DOC.md
+    REVENUE DOC.md
+    RISK DOC.md
+notebooks/
+    employment-pred-model.ipynb
+    rag-agent.ipynb
+    revenue-pred-model.ipynb
+    risk-model.ipynb
+    .ipynb_checkpoints/
+        employment-pred-model-checkpoint.ipynb
+        revenue-pred-model-checkpoint.ipynb
+    ml/
+        artifacts/
+prezi/
+    prezi.tex
+synthetic_outputs/
+    core_banking_loans.csv
+    impact_data.csv
+\end{verbatim}

@@ -1,0 +1,2404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Inkomoko Early Warning System — Demo</title>
+  <style>
+    :root {
+      --primary: #1a73e8;
+      --primary-light: #e8f0fe;
+      --danger: #d93025;
+      --warn: #f9ab00;
+      --success: #1e8e3e;
+      --bg: #f8f9fa;
+      --card: #fff;
+      --text: #202124;
+      --muted: #5f6368;
+      --border: #dadce0;
+      --radius: 10px;
+      --shadow: 0 1px 3px rgba(0,0,0,.12), 0 1px 2px rgba(0,0,0,.08);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; }
+
+    /* ── Header ─────────────────────────────────────────────── */
+    header {
+      background: var(--primary);
+      color: #fff;
+      padding: 1rem 2rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      box-shadow: var(--shadow);
+    }
+    header h1 { font-size: 1.25rem; font-weight: 600; }
+    header .badge {
+      background: rgba(255,255,255,.2);
+      padding: .15rem .6rem;
+      border-radius: 12px;
+      font-size: .75rem;
+    }
+    header .right { margin-left: auto; display: flex; gap: .75rem; align-items: center; }
+    .status-dot {
+      width: 8px; height: 8px; border-radius: 50%; background: var(--success);
+      display: inline-block;
+    }
+
+    /* ── Layout ─────────────────────────────────────────────── */
+    .container { max-width: 1200px; margin: 0 auto; padding: 1.5rem; }
+
+    /* ── Tabs ───────────────────────────────────────────────── */
+    .tabs {
+      display: flex;
+      gap: .25rem;
+      border-bottom: 2px solid var(--border);
+      margin-bottom: 1.5rem;
+    }
+    .tab-btn {
+      padding: .6rem 1.25rem;
+      background: none;
+      border: none;
+      font-size: .9rem;
+      cursor: pointer;
+      border-bottom: 3px solid transparent;
+      color: var(--muted);
+      transition: all .2s;
+    }
+    .tab-btn:hover { color: var(--primary); }
+    .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* ── Cards ──────────────────────────────────────────────── */
+    .card {
+      background: var(--card);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 1.25rem;
+      margin-bottom: 1.25rem;
+    }
+    .card h3 { font-size: 1rem; margin-bottom: .75rem; color: var(--muted); }
+
+    /* ── Input area ─────────────────────────────────────────── */
+    .editor-wrap { position: relative; }
+    textarea.json-editor {
+      width: 100%;
+      min-height: 220px;
+      font-family: 'Fira Code', 'Cascadia Code', monospace;
+      font-size: .82rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: .75rem;
+      resize: vertical;
+      background: #fafbfc;
+      tab-size: 2;
+    }
+    textarea.json-editor:focus { outline: 2px solid var(--primary); border-color: transparent; }
+
+    /* ── Buttons ─────────────────────────────────────────────── */
+    .btn-row { display: flex; gap: .5rem; margin-top: .75rem; flex-wrap: wrap; }
+    .btn {
+      padding: .5rem 1.1rem;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: .85rem;
+      font-weight: 500;
+      transition: all .15s;
+    }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:hover { background: #1557b0; }
+    .btn-primary:disabled { background: #94bef7; cursor: wait; }
+    .btn-outline { background: var(--card); color: var(--primary); border: 1px solid var(--primary); }
+    .btn-outline:hover { background: var(--primary-light); }
+    .btn-sm { padding: .35rem .75rem; font-size: .8rem; }
+
+    /* ── Results ─────────────────────────────────────────────── */
+    .results-area { min-height: 120px; }
+    .result-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: .75rem;
+    }
+    .metric-card {
+      background: var(--bg);
+      border-radius: 8px;
+      padding: 1rem;
+      text-align: center;
+      border: 1px solid var(--border);
+    }
+    .metric-card .label { font-size: .75rem; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+    .metric-card .value { font-size: 1.5rem; font-weight: 700; margin-top: .25rem; }
+
+    .tier-badge {
+      display: inline-block;
+      padding: .2rem .75rem;
+      border-radius: 12px;
+      font-weight: 600;
+      font-size: .85rem;
+    }
+    .tier-LOW    { background: #e6f4ea; color: var(--success); }
+    .tier-MEDIUM { background: #fef7e0; color: #e37400; }
+    .tier-HIGH   { background: #fce8e6; color: var(--danger); }
+
+    /* ── Probability bar ────────────────────────────────────── */
+    .prob-bar-wrap { margin: .5rem 0; }
+    .prob-bar-label { font-size: .75rem; color: var(--muted); display: flex; justify-content: space-between; }
+    .prob-bar { height: 8px; border-radius: 4px; background: var(--border); overflow: hidden; margin-top: 2px; }
+    .prob-bar-fill { height: 100%; border-radius: 4px; transition: width .4s ease; }
+    .prob-bar-fill.low    { background: var(--success); }
+    .prob-bar-fill.medium { background: var(--warn); }
+    .prob-bar-fill.high   { background: var(--danger); }
+
+    .raw-json { display: none; margin-top: 1rem; }
+    .raw-json.show { display: block; }
+    .raw-json pre {
+      background: #1e1e2e;
+      color: #cdd6f4;
+      padding: 1rem;
+      border-radius: 8px;
+      overflow-x: auto;
+      font-size: .8rem;
+      max-height: 300px;
+    }
+
+    .error-msg { color: var(--danger); font-size: .85rem; margin-top: .5rem; }
+    .spinner {
+      display: inline-block; width: 16px; height: 16px;
+      border: 2px solid rgba(255,255,255,.4);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin .6s linear infinite;
+      margin-right: .4rem;
+      vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Table for batch ────────────────────────────────────── */
+    .results-table { width: 100%; border-collapse: collapse; font-size: .83rem; margin-top: .75rem; }
+    .results-table th, .results-table td { padding: .5rem .6rem; text-align: left; border-bottom: 1px solid var(--border); }
+    .results-table th { background: var(--bg); color: var(--muted); font-weight: 600; text-transform: uppercase; font-size: .7rem; letter-spacing: .5px; }
+    .results-table tr:hover td { background: var(--primary-light); }
+
+    .empty-state { text-align: center; color: var(--muted); padding: 2rem; }
+    .empty-state svg { width: 48px; height: 48px; margin-bottom: .5rem; opacity: .4; }
+
+    /* ── File upload ──────────────────────────────────────── */
+    .upload-area {
+      margin-top: .75rem;
+      padding: .75rem 1rem;
+      border: 2px dashed var(--border);
+      border-radius: 8px;
+      text-align: center;
+      color: var(--muted);
+      font-size: .83rem;
+      cursor: pointer;
+      transition: all .2s;
+    }
+    .upload-area:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-light); }
+    .upload-area.dragover { border-color: var(--primary); background: var(--primary-light); }
+    .upload-area svg { vertical-align: middle; margin-right: .35rem; }
+    .upload-area input[type="file"] { display: none; }
+
+    /* ── Stored-data banner ───────────────────────────────── */
+    .stored-banner {
+      display: none;
+      background: var(--primary-light);
+      border: 1px solid var(--primary);
+      border-radius: 8px;
+      padding: .6rem 1rem;
+      margin-bottom: 1.25rem;
+      font-size: .85rem;
+      color: var(--primary);
+      align-items: center;
+      gap: .5rem;
+    }
+    .stored-banner.visible { display: flex; }
+    .stored-banner svg { flex-shrink: 0; }
+    .stored-banner .info { flex: 1; }
+    .stored-banner .info strong { font-weight: 600; }
+    .stored-banner .actions { display: flex; gap: .4rem; }
+    .btn-success { background: var(--success); color: #fff; border: none; }
+    .btn-success:hover { background: #1a7c36; }
+    .btn-danger-outline { background: var(--card); color: var(--danger); border: 1px solid var(--danger); }
+    .btn-danger-outline:hover { background: #fce8e6; }
+
+    /* ── Client Profile Modal ─────────────────────────────── */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,.45); z-index: 1000;
+      justify-content: center; align-items: flex-start;
+      padding: 3rem 1rem; overflow-y: auto;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: var(--card); border-radius: var(--radius);
+      box-shadow: 0 8px 30px rgba(0,0,0,.2);
+      width: 100%; max-width: 860px;
+      max-height: 85vh; overflow-y: auto;
+      padding: 1.5rem;
+      animation: slideUp .25s ease;
+    }
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .modal-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 1.25rem; padding-bottom: .75rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .modal-header h2 { font-size: 1.15rem; display: flex; align-items: center; gap: .5rem; }
+    .modal-close {
+      background: none; border: none; font-size: 1.5rem;
+      cursor: pointer; color: var(--muted); line-height: 1;
+    }
+    .modal-close:hover { color: var(--text); }
+
+    .profile-section { margin-bottom: 1.25rem; }
+    .profile-section h4 {
+      font-size: .85rem; text-transform: uppercase; letter-spacing: .5px;
+      color: var(--muted); margin-bottom: .6rem;
+      display: flex; align-items: center; gap: .4rem;
+    }
+    .profile-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: .5rem;
+    }
+    .profile-field {
+      background: var(--bg); border-radius: 6px; padding: .5rem .65rem;
+      border: 1px solid var(--border); font-size: .82rem;
+    }
+    .profile-field .pf-label {
+      font-size: .7rem; color: var(--muted); text-transform: uppercase;
+      letter-spacing: .3px; margin-bottom: .15rem;
+    }
+    .profile-field .pf-value { font-weight: 600; word-break: break-word; }
+
+    .profile-pipeline {
+      background: var(--bg); border-radius: 8px; padding: 1rem;
+      border: 1px solid var(--border); margin-bottom: .75rem;
+    }
+    .profile-pipeline h5 {
+      font-size: .82rem; margin-bottom: .5rem;
+      display: flex; align-items: center; gap: .4rem;
+    }
+    .profile-pipeline .error-text { color: var(--danger); font-size: .82rem; }
+
+    .clickable-id {
+      color: var(--primary); cursor: pointer; text-decoration: underline;
+      text-decoration-style: dotted;
+    }
+    .clickable-id:hover { text-decoration-style: solid; }
+
+    /* ── Dashboard Analytics ─────────────────────────────── */
+    .kpi-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: .75rem;
+      margin-bottom: 1.25rem;
+    }
+    .kpi-card {
+      background: var(--card);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 1rem;
+      text-align: center;
+      border-left: 4px solid var(--primary);
+    }
+    .kpi-card.green  { border-left-color: var(--success); }
+    .kpi-card.orange { border-left-color: var(--warn); }
+    .kpi-card.red    { border-left-color: var(--danger); }
+    .kpi-card .kpi-label { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+    .kpi-card .kpi-value { font-size: 1.4rem; font-weight: 700; margin-top: .2rem; }
+
+    .chart-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+      gap: 1.25rem;
+      margin-bottom: 1.25rem;
+    }
+    .chart-card {
+      background: var(--card);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 1rem 1.25rem;
+    }
+    .chart-card h4 {
+      font-size: .85rem; color: var(--muted); margin-bottom: .75rem;
+      display: flex; align-items: center; gap: .4rem;
+    }
+    .chart-card canvas { max-height: 260px; }
+
+    .stat-table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+    .stat-table th, .stat-table td { padding: .4rem .6rem; text-align: left; border-bottom: 1px solid var(--border); }
+    .stat-table th { background: var(--bg); color: var(--muted); font-weight: 600; text-transform: uppercase; font-size: .7rem; }
+
+    .corr-table { font-size: .72rem; }
+    .corr-table td, .corr-table th { padding: .3rem .4rem; text-align: center; }
+    .corr-cell { border-radius: 3px; color: #fff; font-weight: 600; }
+
+    .dash-section { margin-bottom: 1.5rem; }
+    .dash-section > h3 {
+      font-size: .95rem; color: var(--text); margin-bottom: .75rem;
+      display: flex; align-items: center; gap: .5rem;
+    }
+
+    .dash-source {
+      font-size: .82rem; color: var(--muted); display: flex;
+      align-items: center; gap: .5rem; margin-bottom: 1rem;
+    }
+    .dash-source select {
+      font-size: .82rem; padding: .25rem .5rem;
+      border: 1px solid var(--border); border-radius: 6px;
+    }
+
+    /* ── Retrain styles ──────────────────────────────────── */
+    .retrain-form { display: flex; flex-direction: column; gap: 1.2rem; }
+    .retrain-form label { font-weight: 600; font-size: .82rem; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+
+    /* Pipeline selector cards */
+    .pipeline-selector { display: grid; grid-template-columns: repeat(3, 1fr); gap: .65rem; }
+    .pipeline-option {
+      position: relative; cursor: pointer;
+      border: 2px solid var(--border); border-radius: 10px;
+      padding: .85rem .9rem; transition: all .18s;
+      background: var(--card);
+    }
+    .pipeline-option:hover { border-color: var(--primary); background: var(--primary-light); }
+    .pipeline-option.selected { border-color: var(--primary); background: var(--primary-light); box-shadow: 0 0 0 3px rgba(99,102,241,.12); }
+    .pipeline-option .po-icon {
+      width: 32px; height: 32px; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: .4rem; font-size: 1rem;
+    }
+    .pipeline-option .po-name { font-weight: 700; font-size: .88rem; margin-bottom: .15rem; }
+    .pipeline-option .po-desc { font-size: .75rem; color: var(--muted); line-height: 1.35; }
+    .pipeline-option .po-check {
+      position: absolute; top: .5rem; right: .5rem;
+      width: 20px; height: 20px; border-radius: 50%;
+      background: var(--primary); color: #fff;
+      display: none; align-items: center; justify-content: center;
+    }
+    .pipeline-option.selected .po-check { display: flex; }
+
+    /* Requirements info */
+    .retrain-req {
+      background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+      padding: .65rem .9rem; font-size: .82rem;
+    }
+    .retrain-req-title { font-weight: 600; font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .3px; margin-bottom: .35rem; }
+    .retrain-req-tags { display: flex; flex-wrap: wrap; gap: .3rem; }
+    .retrain-req-tag {
+      background: var(--primary-light); color: var(--primary); font-weight: 600;
+      padding: .2rem .55rem; border-radius: 6px; font-size: .76rem;
+      font-family: 'Fira Code','Cascadia Code',monospace;
+    }
+
+    .retrain-progress {
+      display: none; padding: 1rem; background: var(--primary-light);
+      border-radius: 8px; border: 1px solid var(--primary);
+      font-size: .85rem; color: var(--primary);
+    }
+    .retrain-progress.visible { display: flex; align-items: center; gap: .5rem; }
+    .retrain-results { margin-top: 1rem; }
+    .retrain-metric-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+      gap: .6rem; margin-top: .5rem;
+    }
+
+    /* ── Sparkline / Trajectory styles ───────────────────── */
+    .sparkline-wrap { display:inline-block; vertical-align:middle; }
+    .sparkline-wrap svg { display:block; }
+    .sparkline-labels { display:flex; justify-content:space-between; font-size:.68rem; color:var(--muted); padding:0 4px; font-weight:600; }
+    .trajectory-row { display:flex; align-items:center; gap:.6rem; margin:.45rem 0; }
+    .traj-label { font-size:.8rem; font-weight:700; color:var(--fg); min-width:68px; text-align:right; }
+    .traj-cells { display:flex; gap:.25rem; align-items:center; }
+    .traj-cell { display:flex; flex-direction:column; align-items:center; gap:2px; min-width:56px; }
+    .traj-month { font-size:.62rem; color:var(--muted); text-transform:uppercase; font-weight:600; }
+    .traj-val { font-size:.88rem; font-weight:700; }
+    /* ── Delta change badges ──────────────────────────────── */
+    .delta-arrow { display:flex; flex-direction:column; align-items:center; gap:0; min-width:24px; font-size:.66rem; font-weight:700; line-height:1.1; }
+    .delta-arrow .arrow { font-size:.82rem; }
+    .delta-arrow .delta-val { white-space:nowrap; }
+    .delta-up { color:#188038; }
+    .delta-down { color:#d93025; }
+    .delta-flat { color:var(--muted); }
+    .delta-summary { display:inline-flex; align-items:center; gap:.3rem; font-size:.74rem; font-weight:600; padding:3px 8px; border-radius:20px; margin-left:.5rem; }
+    .delta-summary.up { background:rgba(24,128,56,.1); color:#188038; }
+    .delta-summary.down { background:rgba(217,48,37,.1); color:#d93025; }
+    .delta-summary.flat { background:rgba(128,128,128,.1); color:var(--muted); }
+
+    /* ── Documentation styles ─────────────────────────────── */
+    .doc-nav { display:flex; gap:.5rem; margin-bottom:1rem; flex-wrap:wrap; }
+    .doc-nav-btn {
+      padding:.45rem 1rem; border-radius:6px; border:1px solid var(--border);
+      background:var(--card); color:var(--muted); font-size:.82rem; cursor:pointer;
+      transition: all .15s;
+    }
+    .doc-nav-btn:hover { color:var(--fg); border-color:var(--primary); }
+    .doc-nav-btn.active { background:var(--primary); color:#fff; border-color:var(--primary); font-weight:600; }
+    .docs-rendered {
+      background:var(--card); border:1px solid var(--border); border-radius:10px;
+      padding:1.5rem 2rem; line-height:1.7; font-size:.92rem; overflow-x:auto;
+    }
+    .docs-rendered h1 { font-size:1.5rem; margin:1.5rem 0 .75rem; border-bottom:2px solid var(--border); padding-bottom:.4rem; }
+    .docs-rendered h2 { font-size:1.25rem; margin:1.4rem 0 .6rem; border-bottom:1px solid var(--border); padding-bottom:.3rem; color:var(--primary); }
+    .docs-rendered h3 { font-size:1.08rem; margin:1.2rem 0 .5rem; color:var(--primary-dark, var(--primary)); }
+    .docs-rendered h4, .docs-rendered h5 { font-size:.95rem; margin:1rem 0 .4rem; }
+    .docs-rendered p { margin:.5rem 0; }
+    .docs-rendered ul, .docs-rendered ol { margin:.4rem 0 .4rem 1.5rem; }
+    .docs-rendered li { margin:.2rem 0; }
+    .docs-rendered code {
+      background:rgba(99,102,241,.08); color:var(--primary); padding:.15rem .35rem;
+      border-radius:4px; font-size:.84rem; font-family:'Fira Code','Cascadia Code',monospace;
+    }
+    .docs-rendered pre {
+      background:#1e1e2e; color:#cdd6f4; padding:1rem 1.25rem; border-radius:8px;
+      overflow-x:auto; margin:.75rem 0; font-size:.82rem; line-height:1.6;
+    }
+    .docs-rendered pre code { background:none; color:inherit; padding:0; }
+    .docs-rendered blockquote {
+      border-left:3px solid var(--primary); padding:.5rem 1rem; margin:.75rem 0;
+      background:rgba(99,102,241,.04); color:var(--muted); font-style:italic;
+    }
+    .docs-rendered hr { border:none; border-top:1px solid var(--border); margin:1.5rem 0; }
+    .docs-rendered table { border-collapse:collapse; width:100%; margin:.75rem 0; font-size:.85rem; }
+    .docs-rendered th, .docs-rendered td { border:1px solid var(--border); padding:.4rem .6rem; text-align:left; }
+    .docs-rendered th { background:rgba(99,102,241,.06); font-weight:600; }
+    .docs-rendered strong { color:var(--fg); }
+    .docs-rendered input[type="checkbox"] { margin-right:.4rem; }
+
+    /* ── Model Cards styles ──────────────────────────────── */
+    .pipeline-card {
+      background: var(--card); border-radius: var(--radius);
+      box-shadow: var(--shadow); padding: 1.5rem; margin-bottom: 1.5rem;
+      border-left: 4px solid var(--primary);
+    }
+    .pipeline-card.emp { border-left-color: var(--success); }
+    .pipeline-card.rev { border-left-color: var(--warn); }
+
+    .pipeline-card h3 {
+      font-size: 1.1rem; margin-bottom: .1rem; color: var(--text);
+      display: flex; align-items: center; gap: .5rem;
+    }
+    .pipeline-card .pipeline-purpose {
+      font-size: .85rem; color: var(--muted); margin: .35rem 0 1rem;
+      line-height: 1.5; padding-left: .1rem;
+    }
+
+    /* Section dividers within cards */
+    .mc-section { margin-bottom: 1.1rem; }
+    .mc-section-title {
+      font-size: .82rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .06em; color: var(--muted); margin-bottom: .6rem;
+      display: flex; align-items: center; gap: .4rem;
+      padding-bottom: .35rem; border-bottom: 1px solid var(--border);
+    }
+
+    /* What It Predicts cards */
+    .predict-target-card {
+      display: flex; align-items: flex-start; gap: .6rem;
+      background: var(--bg); border-radius: 8px; padding: .7rem .85rem;
+      border: 1px solid var(--border); margin-bottom: .5rem;
+    }
+    .predict-target-card .target-icon {
+      width: 32px; height: 32px; border-radius: 50%; display: flex;
+      align-items: center; justify-content: center; flex-shrink: 0;
+      font-size: .9rem; margin-top: .1rem;
+    }
+    .predict-target-card .target-icon.cls { background: rgba(99,102,241,.12); color: var(--primary); }
+    .predict-target-card .target-icon.reg { background: rgba(16,185,129,.12); color: var(--success); }
+    .predict-target-card .target-name {
+      font-size: .88rem; font-weight: 600; color: var(--text);
+    }
+    .predict-target-card .target-desc {
+      font-size: .78rem; color: var(--muted); margin-top: .15rem; line-height: 1.45;
+    }
+    .predict-target-card code {
+      background: rgba(99,102,241,.08); color: var(--primary);
+      padding: .1rem .3rem; border-radius: 3px; font-size: .72rem;
+    }
+
+    /* Metric cards with explanation */
+    .mc-metric-card {
+      background: var(--bg); border-radius: 8px; padding: .7rem .85rem;
+      border: 1px solid var(--border);
+    }
+    .mc-metric-header {
+      display: flex; align-items: center; justify-content: space-between; gap: .5rem;
+    }
+    .mc-metric-name { font-size: .82rem; font-weight: 600; color: var(--text); }
+    .mc-metric-value { font-size: 1.15rem; font-weight: 700; }
+    .mc-metric-value.quality-excellent { color: #059669; }
+    .mc-metric-value.quality-good { color: var(--primary); }
+    .mc-metric-value.quality-fair { color: #d97706; }
+    .mc-metric-value.quality-poor { color: var(--danger); }
+    .mc-metric-bar {
+      height: 4px; border-radius: 2px; background: var(--border);
+      margin: .4rem 0; overflow: hidden;
+    }
+    .mc-metric-bar-fill { height: 100%; border-radius: 2px; transition: width .4s ease; }
+    .mc-metric-explain {
+      font-size: .72rem; color: var(--muted); line-height: 1.4; margin-top: .15rem;
+    }
+    .mc-metric-quality-label {
+      font-size: .65rem; font-weight: 600; text-transform: uppercase;
+      letter-spacing: .04em; padding: .1rem .35rem; border-radius: 4px;
+    }
+    .mc-metric-quality-label.excellent { background: #d1fae5; color: #065f46; }
+    .mc-metric-quality-label.good { background: rgba(99,102,241,.1); color: var(--primary); }
+    .mc-metric-quality-label.fair { background: #fef3c7; color: #92400e; }
+    .mc-metric-quality-label.poor { background: #fee2e2; color: #991b1b; }
+
+    .mc-metrics-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: .6rem;
+    }
+
+    /* Model detail cards */
+    .model-sub-card {
+      background: var(--bg); border-radius: 8px; padding: .85rem;
+      border: 1px solid var(--border); margin-bottom: .6rem;
+    }
+    .model-sub-card h5 {
+      font-size: .85rem; margin-bottom: .4rem;
+      display: flex; align-items: center; gap: .4rem; flex-wrap: wrap;
+    }
+    .model-sub-card .algo-badge {
+      display: inline-block; background: var(--primary-light); color: var(--primary);
+      padding: .1rem .5rem; border-radius: 10px; font-size: .72rem; font-weight: 600;
+    }
+    .model-sub-card .type-badge {
+      display: inline-block; padding: .1rem .5rem; border-radius: 10px;
+      font-size: .68rem; font-weight: 600;
+    }
+    .type-badge.classifier { background: rgba(99,102,241,.1); color: var(--primary); }
+    .type-badge.regressor { background: rgba(16,185,129,.1); color: #059669; }
+    .model-sub-card .file-info {
+      font-size: .72rem; color: var(--muted); margin-top: .3rem;
+    }
+    .importance-bar-wrap { margin: .15rem 0; }
+    .importance-label {
+      font-size: .72rem; color: var(--muted); display: flex;
+      justify-content: space-between;
+    }
+    .importance-bar {
+      height: 6px; border-radius: 3px; background: var(--border);
+      overflow: hidden; margin-top: 1px;
+    }
+    .importance-bar-fill {
+      height: 100%; border-radius: 3px; background: var(--primary);
+      transition: width .3s ease;
+    }
+    .params-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: .3rem; margin-top: .3rem;
+    }
+    .param-item {
+      font-size: .75rem; background: var(--card); padding: .25rem .5rem;
+      border-radius: 4px; border: 1px solid var(--border);
+    }
+    .param-item .pk { color: var(--muted); }
+    .param-item .pv { font-weight: 600; }
+    .features-list {
+      display: flex; flex-wrap: wrap; gap: .25rem; margin-top: .3rem;
+    }
+    .feature-tag {
+      background: var(--primary-light); color: var(--primary);
+      padding: .1rem .45rem; border-radius: 10px;
+      font-size: .7rem; font-weight: 500;
+    }
+    .retrain-info-box {
+      background: #e6f4ea; border: 1px solid var(--success); border-radius: 8px;
+      padding: .6rem .85rem; font-size: .82rem; color: #1a5c2a;
+      margin-top: .5rem;
+    }
+
+    /* Summary stat pills */
+    .mc-stat-pills { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: 1rem; }
+    .mc-stat-pill {
+      background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+      padding: .4rem .85rem; display: flex; align-items: center; gap: .4rem;
+      font-size: .82rem;
+    }
+    .mc-stat-pill .pill-value { font-weight: 700; color: var(--primary); }
+    .mc-stat-pill .pill-label { color: var(--muted); }
+
+    /* ── AI Insight cards ────────────────────────────────── */
+    /* (styles consolidated below) */
+
+    footer { text-align: center; color: var(--muted); font-size: .75rem; padding: 2rem 0 1rem; }
+
+    /* ── AI Insight / RAG Agent styles (redesigned) ─────── */
+    .ai-insight {
+      position: relative;
+      background: #fff;
+      border: 1px solid rgba(99,102,241,.14);
+      border-left: 3px solid transparent;
+      border-image: linear-gradient(180deg, #6366f1, #a855f7) 1;
+      border-image-slice: 0 0 0 1;
+      border-radius: 12px;
+      padding: 1rem 1.1rem 1rem 1rem;
+      margin: .85rem 0;
+      overflow: hidden;
+      display: flex;
+      gap: .85rem;
+      align-items: flex-start;
+      box-shadow: 0 1px 3px rgba(99,102,241,.06), 0 0 0 1px rgba(99,102,241,.04);
+      transition: box-shadow .25s ease, transform .25s ease;
+    }
+    /* border-image breaks border-radius on the left, so we fake it */
+    .ai-insight { border-left: none; border-image: none; }
+    .ai-insight::before {
+      content: '';
+      position: absolute; left: 0; top: 0; bottom: 0; width: 3.5px;
+      background: linear-gradient(180deg, #2196f3, #7e57c2);
+      border-radius: 12px 0 0 12px;
+    }
+    .ai-insight::after {
+      content: '';
+      position: absolute; inset: 0;
+      background: linear-gradient(135deg, rgba(33,150,243,.03) 0%, rgba(126,87,194,.04) 100%);
+      pointer-events: none;
+      border-radius: 12px;
+    }
+    .ai-insight:hover {
+      box-shadow: 0 4px 16px rgba(99,102,241,.12), 0 0 0 1px rgba(99,102,241,.08);
+      transform: translateY(-1px);
+    }
+
+    /* Icon container — soft circle */
+    .ai-insight .ai-icon-wrap {
+      flex-shrink: 0;
+      width: 36px; height: 36px;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 10px;
+      background: linear-gradient(135deg, rgba(33,150,243,.08), rgba(126,87,194,.10));
+      position: relative;
+      z-index: 1;
+    }
+    .ai-insight .ai-icon-wrap svg { width: 20px; height: 20px; }
+
+    /* Content section */
+    .ai-insight .ai-body { flex: 1; min-width: 0; position: relative; z-index: 1; }
+
+    .ai-insight .ai-header {
+      display: flex; align-items: center; gap: .4rem; flex-wrap: wrap;
+      margin-bottom: .3rem;
+    }
+    .ai-insight .ai-title {
+      font-size: .78rem; font-weight: 700; color: #1e293b;
+      letter-spacing: .01em;
+    }
+    .ai-insight .ai-text {
+      font-size: .8rem; color: #64748b; line-height: 1.65;
+    }
+
+    /* Agent badge */
+    .ai-badge {
+      display: inline-flex; align-items: center; gap: .3rem;
+      background: linear-gradient(135deg, #2196f3, #7e57c2);
+      color: #fff; font-size: .58rem; font-weight: 700;
+      padding: .18rem .55rem; border-radius: 20px;
+      text-transform: uppercase; letter-spacing: .05em;
+      box-shadow: 0 1px 4px rgba(33,150,243,.25);
+    }
+    .ai-badge svg { width: 9px; height: 9px; }
+    .ai-badge svg path { fill: #fff; stroke: none; }
+
+    /* Compact inline AI badge (section headers) */
+    .ai-inline-badge {
+      display: inline-flex; align-items: center; gap: .2rem;
+      background: linear-gradient(135deg, rgba(33,150,243,.10), rgba(126,87,194,.12));
+      color: #5b5fc7; font-size: .58rem; font-weight: 700;
+      padding: .12rem .42rem; border-radius: 20px;
+      text-transform: uppercase; letter-spacing: .04em;
+      vertical-align: middle; margin-left: .35rem;
+      border: 1px solid rgba(99,102,241,.12);
+      cursor: help;
+      transition: background .2s;
+    }
+    .ai-inline-badge:hover {
+      background: linear-gradient(135deg, rgba(33,150,243,.16), rgba(126,87,194,.18));
+    }
+    .ai-inline-badge svg { width: 9px; height: 9px; }
+
+    /* Sparkle icon animation */
+    .ai-icon-sparkle { display: inline-block; vertical-align: middle; animation: ai-pulse 2.5s ease-in-out infinite alternate; }
+    @keyframes ai-pulse {
+      0%   { transform: scale(1) rotate(0deg); opacity: .85; }
+      100% { transform: scale(1.08) rotate(3deg); opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+  </svg>
+  <h1>Inkomoko Early Warning System</h1>
+  <span class="badge">v1.0.0</span>
+  <div class="right">
+    <span class="status-dot"></span>
+    <span style="font-size:.85rem">API Online</span>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- Stored-data banner (shared across all tabs) -->
+  <div class="stored-banner" id="stored-banner">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
+    <div class="info">
+      <strong id="stored-filename">—</strong> &mdash;
+      <span id="stored-count">0</span> records in memory (available to all models)
+    </div>
+    <div class="actions">
+      <button class="btn btn-sm btn-danger-outline" onclick="clearStoredData()">Clear</button>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab-btn" data-tab="dashboard">Dashboard</button>
+    <button class="tab-btn active" data-tab="data">Data Entry</button>
+    <button class="tab-btn" data-tab="risk">Risk</button>
+    <button class="tab-btn" data-tab="employment">Employment</button>
+    <button class="tab-btn" data-tab="revenue">Revenue</button>
+    <button class="tab-btn" data-tab="retrain">Retrain Models</button>
+    <button class="tab-btn" data-tab="modelcards">Model Cards</button>
+    <button class="tab-btn" data-tab="docs">Documentation</button>
+  </div>
+
+  <!-- ═══════════════════ DATA ENTRY TAB ═══════════════════ -->
+  <div id="tab-data" class="tab-panel active">
+    <div class="card">
+      <h3>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        &nbsp;Input — Client Records (JSON array)
+      </h3>
+      <p style="font-size:.85rem;color:var(--muted);margin:-.25rem 0 .75rem">
+        Enter or upload client data here. All three model pipelines (Risk, Employment, Revenue) will run at once.
+      </p>
+      <div class="editor-wrap">
+        <textarea id="data-input" class="json-editor" spellcheck="false" placeholder='[{"age": 33, "gender": "Male", ...}]'></textarea>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="run-all-btn" onclick="predictAll()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:.3rem"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          Run All Models
+        </button>
+        <button class="btn btn-outline btn-sm" onclick="loadSample()">Load Sample Data</button>
+        <button class="btn btn-outline btn-sm stored-btn" onclick="useStoredData()" style="display:none">Use Stored Data</button>
+        <button class="btn btn-outline btn-sm" onclick="formatJSON()">Format JSON</button>
+        <button class="btn btn-outline btn-sm" onclick="clearAll()">Clear</button>
+      </div>
+      <div class="upload-area" id="data-upload" onclick="this.querySelector('input').click()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Import Excel / CSV file
+        <input type="file" accept=".xlsx,.xls,.csv" onchange="uploadExcel(this.files[0])" />
+      </div>
+      <div id="data-error" class="error-msg"></div>
+    </div>
+
+    <!-- Results summary shown after running all models -->
+    <div class="card" id="data-summary" style="display:none">
+      <h3>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
+        &nbsp;All Models Complete
+      </h3>
+      <div id="data-summary-body"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ DASHBOARD TAB ═══════════════════ -->
+  <div id="tab-dashboard" class="tab-panel">
+    <div class="dash-source">
+      <span>Data source:</span>
+      <select id="dash-source-select">
+        <option value="test">Test dataset (built-in)</option>
+        <option value="stored">Uploaded data (in memory)</option>
+      </select>
+      <button class="btn btn-primary btn-sm" onclick="loadDashboard()">Load Analytics</button>
+    </div>
+    <div id="dash-content">
+      <div class="empty-state">
+        <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3v18h18"/><path d="M7 16l4-4 4 4 5-6"/></svg>
+        <p>Click <strong>Load Analytics</strong> to generate the dashboard</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ RISK TAB ═══════════════════ -->
+  <div id="tab-risk" class="tab-panel">
+    <div class="card results-area" id="risk-results">
+      <h3>Risk Predictions</h3>
+      <div class="empty-state">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        <p>Go to <strong>Data Entry</strong> tab and click <strong>Run All Models</strong> to see risk predictions</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ EMPLOYMENT TAB ═══════════════════ -->
+  <div id="tab-employment" class="tab-panel">
+    <div class="card results-area" id="employment-results">
+      <h3>Employment Predictions</h3>
+      <div class="empty-state">
+        <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        <p>Go to <strong>Data Entry</strong> tab and click <strong>Run All Models</strong> to see employment forecasts</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ REVENUE TAB ═══════════════════ -->
+  <div id="tab-revenue" class="tab-panel">
+    <div class="card results-area" id="revenue-results">
+      <h3>Revenue Predictions</h3>
+      <div class="empty-state">
+        <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <p>Go to <strong>Data Entry</strong> tab and click <strong>Run All Models</strong> to see revenue forecasts</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ RETRAIN TAB ═══════════════════ -->
+  <div id="tab-retrain" class="tab-panel">
+    <div class="card">
+      <h3>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+        &nbsp;Retrain a Model Pipeline
+      </h3>
+      <p style="font-size:.85rem;color:var(--muted);margin:.5rem 0 1rem">
+        Upload a dataset <strong>with target columns</strong> to retrain a pipeline.
+        The new model will replace the current one and be available immediately.
+      </p>
+
+      <div class="retrain-form">
+        <div>
+          <label>Select pipeline to retrain</label>
+          <input type="hidden" id="retrain-pipeline" value="risk" />
+          <div class="pipeline-selector">
+            <div class="pipeline-option selected" data-pipeline="risk" onclick="selectPipeline(this)">
+              <div class="po-check"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></div>
+              <div class="po-icon" style="background:#fef2f2;color:#ef4444">&#9888;</div>
+              <div class="po-name">Risk</div>
+              <div class="po-desc">Risk tier classification &amp; score regression</div>
+            </div>
+            <div class="pipeline-option" data-pipeline="employment" onclick="selectPipeline(this)">
+              <div class="po-check"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></div>
+              <div class="po-icon" style="background:#eff6ff;color:#3b82f6">&#128188;</div>
+              <div class="po-name">Employment</div>
+              <div class="po-desc">Jobs created &amp; jobs lost forecasting</div>
+            </div>
+            <div class="pipeline-option" data-pipeline="revenue" onclick="selectPipeline(this)">
+              <div class="po-check"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></div>
+              <div class="po-icon" style="background:#f0fdf4;color:#22c55e">&#128176;</div>
+              <div class="po-name">Revenue</div>
+              <div class="po-desc">3-month revenue projection</div>
+            </div>
+          </div>
+        </div>
+
+        <div id="retrain-requirements" class="retrain-req">
+          <div class="retrain-req-title">Required target columns</div>
+          <div class="retrain-req-tags" id="retrain-req-tags"></div>
+        </div>
+
+        <div>
+          <label>Training data (CSV or Excel with target columns)</label>
+          <div class="upload-area" id="retrain-upload" onclick="this.querySelector('input').click()">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Drag &amp; drop or click to upload training data
+            <input type="file" id="retrain-file" accept=".xlsx,.xls,.csv" />
+          </div>
+          <div id="retrain-file-label" style="font-size:.82rem;color:var(--muted);margin-top:.25rem"></div>
+        </div>
+
+        <div class="btn-row">
+          <button class="btn btn-primary" id="retrain-btn" onclick="retrainModel()" disabled>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:.3rem"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+            Start Retraining
+          </button>
+        </div>
+      </div>
+
+      <div class="retrain-progress" id="retrain-progress">
+        <span class="spinner" style="border-color:var(--primary);border-top-color:var(--primary-light)"></span>
+        <span id="retrain-progress-text">Training in progress… This may take a minute.</span>
+      </div>
+      <div id="retrain-error" class="error-msg"></div>
+    </div>
+
+    <div class="card" id="retrain-results" style="display:none">
+      <h3>Training Results</h3>
+      <div id="retrain-results-body"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ MODEL CARDS TAB ═══════════════════ -->
+  <div id="tab-modelcards" class="tab-panel">
+    <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.25rem">
+      <h2 style="font-size:1.1rem;margin:0">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+        Model Cards
+      </h2>
+      <button class="btn btn-primary btn-sm" onclick="loadModelCards()">Refresh</button>
+    </div>
+    <p style="font-size:.82rem;color:var(--muted);margin:0 0 1rem">
+      Transparency summaries for each prediction pipeline — what the model does, how well it performs, and what drives its decisions.
+    </p>
+    <div id="modelcards-content">
+      <div class="empty-state">
+        <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        <p>Loading model cards&hellip;</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+  <!-- ═══════════════════ DOCUMENTATION TAB ═══════════════════ -->
+  <div id="tab-docs" class="tab-panel">
+    <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem">
+      <h2 style="font-size:1.1rem;margin:0">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+        Pipeline Documentation
+      </h2>
+    </div>
+    <!-- doc sub-nav -->
+    <div class="doc-nav">
+      <button class="doc-nav-btn active" data-doc="overview">Overview</button>
+      <button class="doc-nav-btn" data-doc="risk">Risk Pipeline</button>
+      <button class="doc-nav-btn" data-doc="employment">Employment Pipeline</button>
+      <button class="doc-nav-btn" data-doc="revenue">Revenue Pipeline</button>
+    </div>
+    <div id="docs-content" class="docs-rendered">
+      <div class="empty-state">
+        <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+        <p>Loading documentation&hellip;</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══════════════════ CLIENT PROFILE MODAL ═══════════════════ -->
+<div class="modal-overlay" id="profile-modal" onclick="if(event.target===this)closeProfile()">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        <span id="profile-title">Client Profile</span>
+      </h2>
+      <button class="modal-close" onclick="closeProfile()">&times;</button>
+    </div>
+    <div id="profile-body">
+      <div class="empty-state"><span class="spinner" style="border-color:var(--primary);border-top-color:var(--primary-light)"></span> Loading profile…</div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  Inkomoko Early Warning System &mdash; Demo Interface &mdash; Capstone Project 2026
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script>
+// ── Tab switching ──────────────────────────────────────────────────────────
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+  });
+});
+
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.tab === tab);
+  });
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function getEditor()  { return document.getElementById('data-input'); }
+function getError()   { return document.getElementById('data-error'); }
+
+// Global store: keeps input records after each prediction (for profile lookups)
+let _inputCache = [];
+
+function formatJSON() {
+  const el = getEditor();
+  try {
+    el.value = JSON.stringify(JSON.parse(el.value), null, 2);
+    getError().textContent = '';
+  } catch (e) { getError().textContent = 'Invalid JSON: ' + e.message; }
+}
+
+function clearAll() {
+  getEditor().value = '';
+  getError().textContent = '';
+  // Reset result tabs
+  ['risk','employment','revenue'].forEach(p => {
+    const el = document.getElementById(p + '-results');
+    const labels = { risk: 'Risk', employment: 'Employment', revenue: 'Revenue' };
+    el.innerHTML = '<h3>' + labels[p] + ' Predictions</h3><div class="empty-state"><p>Go to <strong>Data Entry</strong> tab and click <strong>Run All Models</strong> to see ' + p + ' predictions</p></div>';
+  });
+  document.getElementById('data-summary').style.display = 'none';
+}
+
+// ── Stored data state ──────────────────────────────────────────────────────
+function updateStoredBanner(filename, count) {
+  const banner = document.getElementById('stored-banner');
+  if (count > 0) {
+    document.getElementById('stored-filename').textContent = filename || 'Uploaded file';
+    document.getElementById('stored-count').textContent = count;
+    banner.classList.add('visible');
+    document.querySelectorAll('.stored-btn').forEach(b => b.style.display = '');
+  } else {
+    banner.classList.remove('visible');
+    document.querySelectorAll('.stored-btn').forEach(b => b.style.display = 'none');
+  }
+}
+
+async function useStoredData() {
+  const errEl = getError();
+  errEl.textContent = '';
+  try {
+    const res = await fetch('/demo/stored-data');
+    const data = await res.json();
+    if (!data.records || data.records.length === 0) {
+      errEl.textContent = 'No data in memory. Import a file first.';
+      return;
+    }
+    getEditor().value = JSON.stringify(data.records, null, 2);
+  } catch (e) {
+    errEl.textContent = 'Could not load stored data: ' + e.message;
+  }
+}
+
+async function clearStoredData() {
+  await fetch('/demo/stored-data', { method: 'DELETE' });
+  updateStoredBanner(null, 0);
+}
+
+// Check for stored data on page load
+(async function checkStored() {
+  try {
+    const res = await fetch('/demo/stored-data');
+    const data = await res.json();
+    if (data.row_count > 0) updateStoredBanner(data.filename, data.row_count);
+  } catch (_) {}
+})();
+
+// ── Upload Excel / CSV file ─────────────────────────────────────────────────
+async function uploadExcel(file) {
+  if (!file) return;
+  const errEl = getError();
+  errEl.textContent = '';
+
+  const area = document.getElementById('data-upload');
+  const origHTML = area.innerHTML;
+  area.innerHTML = '<span class="spinner" style="border-color:var(--primary);border-top-color:var(--primary-light)"></span> Parsing ' + file.name + '…';
+
+  try {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetch('/demo/upload-excel', { method: 'POST', body: form });
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.detail || 'Upload failed');
+    }
+
+    getEditor().value = JSON.stringify(data, null, 2);
+    updateStoredBanner(file.name, data.length);
+  } catch (e) {
+    errEl.textContent = 'Import failed: ' + e.message;
+  } finally {
+    area.innerHTML = origHTML;
+  }
+}
+
+// ── Drag & drop support ────────────────────────────────────────────────────
+const dataUpload = document.getElementById('data-upload');
+if (dataUpload) {
+  dataUpload.addEventListener('dragover', e => { e.preventDefault(); dataUpload.classList.add('dragover'); });
+  dataUpload.addEventListener('dragleave', () => dataUpload.classList.remove('dragover'));
+  dataUpload.addEventListener('drop', e => {
+    e.preventDefault();
+    dataUpload.classList.remove('dragover');
+    const file = e.dataTransfer.files[0];
+    if (file) uploadExcel(file);
+  });
+}
+
+// ── Load sample data from API ──────────────────────────────────────────────
+async function loadSample() {
+  try {
+    const res = await fetch('/demo/sample-data?n=3');
+    const data = await res.json();
+    getEditor().value = JSON.stringify(data, null, 2);
+    getError().textContent = '';
+  } catch (e) {
+    getError().textContent = 'Could not load sample data: ' + e.message;
+  }
+}
+
+// ── Predict All — run all 3 pipelines at once ──────────────────────────────
+async function predictAll() {
+  const errEl = getError();
+  errEl.textContent = '';
+
+  let payload;
+  try {
+    payload = JSON.parse(getEditor().value);
+    if (!Array.isArray(payload)) payload = [payload];
+  } catch (e) {
+    errEl.textContent = 'Invalid JSON: ' + e.message;
+    return;
+  }
+
+  // Show spinner
+  const btn = document.getElementById('run-all-btn');
+  const origText = btn.innerHTML;
+  btn.innerHTML = '<span class="spinner"></span>Running all models…';
+  btn.disabled = true;
+
+  try {
+    const res = await fetch('/demo/predict-all', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail || JSON.stringify(err));
+    }
+
+    const data = await res.json();
+    _inputCache = payload;  // cache for profile lookups
+
+    // Render results in each tab
+    if (data.risk && !data.risk.error) {
+      renderResults('risk', data.risk);
+    } else {
+      document.getElementById('risk-results').innerHTML = '<h3>Risk Predictions</h3><div class="error-msg">⚠ ' + (data.risk?.error || 'Risk pipeline unavailable') + '</div>';
+    }
+
+    if (data.employment && !data.employment.error) {
+      renderResults('employment', data.employment);
+    } else {
+      document.getElementById('employment-results').innerHTML = '<h3>Employment Predictions</h3><div class="error-msg">⚠ ' + (data.employment?.error || 'Employment pipeline unavailable') + '</div>';
+    }
+
+    if (data.revenue && !data.revenue.error) {
+      renderResults('revenue', data.revenue);
+    } else {
+      document.getElementById('revenue-results').innerHTML = '<h3>Revenue Predictions</h3><div class="error-msg">⚠ ' + (data.revenue?.error || 'Revenue pipeline unavailable') + '</div>';
+    }
+
+    // Show summary card with links
+    showPredictSummary(data, payload.length);
+
+  } catch (e) {
+    errEl.textContent = 'Prediction failed: ' + e.message;
+  } finally {
+    btn.innerHTML = origText;
+    btn.disabled = false;
+  }
+}
+
+function showPredictSummary(data, recordCount) {
+  const card = document.getElementById('data-summary');
+  const body = document.getElementById('data-summary-body');
+
+  let html = '<p style="font-size:.85rem;color:var(--muted);margin-bottom:.75rem">' + recordCount + ' record(s) scored across all three pipelines. Click below to view results.</p>';
+  html += '<div class="btn-row">';
+
+  if (data.risk && !data.risk.error) {
+    html += '<button class="btn btn-outline btn-sm" onclick="switchTab(\'risk\')">View Risk →</button>';
+  }
+  if (data.employment && !data.employment.error) {
+    html += '<button class="btn btn-outline btn-sm" onclick="switchTab(\'employment\')">View Employment →</button>';
+  }
+  if (data.revenue && !data.revenue.error) {
+    html += '<button class="btn btn-outline btn-sm" onclick="switchTab(\'revenue\')">View Revenue →</button>';
+  }
+  html += '</div>';
+
+  body.innerHTML = html;
+  card.style.display = '';
+}
+
+// ── Render results ─────────────────────────────────────────────────────────
+function renderResults(pipeline, data) {
+  const el = document.getElementById(pipeline + '-results');
+  const preds = data.predictions;
+
+  if (pipeline === 'risk') {
+    if (preds.length === 1) {
+      el.innerHTML = renderSingleRisk(preds[0], data);
+    } else {
+      el.innerHTML = renderBatchRisk(preds, data);
+    }
+  } else if (pipeline === 'employment') {
+    if (preds.length === 1) {
+      el.innerHTML = renderSingleEmployment(preds[0], data);
+    } else {
+      el.innerHTML = renderBatchEmployment(preds, data);
+    }
+  } else {
+    if (preds.length === 1) {
+      el.innerHTML = renderSingleRevenue(preds[0], data);
+    } else {
+      el.innerHTML = renderBatchRevenue(preds, data);
+    }
+  }
+
+  // Append raw JSON toggle
+  el.innerHTML += `
+    <button class="btn btn-outline btn-sm" style="margin-top:.75rem" onclick="this.nextElementSibling.classList.toggle('show')">
+      Toggle Raw JSON
+    </button>
+    <div class="raw-json"><pre>${JSON.stringify(data, null, 2)}</pre></div>
+  `;
+}
+
+// ── Sparkline helper ───────────────────────────────────────────────────────
+function sparkline(values, {color='var(--primary)', height=40, width=110, label=''} = {}) {
+  const min = Math.min(...values), max = Math.max(...values);
+  const range = max - min || 1;
+  const pad = 6;
+  const pts = values.map((v, i) => {
+    const x = pad + (i / (values.length - 1)) * (width - pad*2);
+    const y = height - pad - ((v - min) / range) * (height - pad*2);
+    return `${x},${y}`;
+  }).join(' ');
+  // gradient fill under the line
+  const firstX = pad, lastX = width - pad;
+  const gradId = 'sg' + Math.random().toString(36).slice(2,8);
+  return `<div class="sparkline-wrap" title="${label}">
+    <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+      <defs>
+        <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="${color}" stop-opacity="0.25"/>
+          <stop offset="100%" stop-color="${color}" stop-opacity="0.02"/>
+        </linearGradient>
+      </defs>
+      <polygon points="${pts} ${lastX},${height-pad} ${firstX},${height-pad}" fill="url(#${gradId})"/>
+      <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      ${values.map((v, i) => {
+        const x = pad + (i / (values.length - 1)) * (width - pad*2);
+        const y = height - pad - ((v - min) / range) * (height - pad*2);
+        return `<circle cx="${x}" cy="${y}" r="4" fill="#fff" stroke="${color}" stroke-width="2"/>`;
+      }).join('')}
+    </svg>
+    <div class="sparkline-labels">${values.map((v, i) => `<span>${i+1}m</span>`).join('')}</div>
+  </div>`;
+}
+
+// ── Delta arrow between two values ─────────────────────────────────────────
+function deltaArrow(prev, curr, fmt, invertColor) {
+  const diff = curr - prev;
+  const absDiff = Math.abs(diff);
+  if (absDiff < 0.005) return `<div class="delta-arrow delta-flat"><span class="arrow">=</span></div>`;
+  const isUp = diff > 0;
+  const cls = invertColor ? (isUp ? 'delta-down' : 'delta-up') : (isUp ? 'delta-up' : 'delta-down');
+  const arrow = isUp ? '▲' : '▼';
+  return `<div class="delta-arrow ${cls}"><span class="arrow">${arrow}</span><span class="delta-val">${fmt(absDiff)}</span></div>`;
+}
+
+// ── Overall direction summary badge ────────────────────────────────────────
+function directionBadge(first, last, fmtDiff, invertColor) {
+  const diff = last - first;
+  const absDiff = Math.abs(diff);
+  if (absDiff < 0.005) return `<span class="delta-summary flat">→ No change</span>`;
+  const isUp = diff > 0;
+  const cls = invertColor ? (isUp ? 'down' : 'up') : (isUp ? 'up' : 'down');
+  const word = isUp ? 'Increased' : 'Decreased';
+  const arrow = isUp ? '↑' : '↓';
+  return `<span class="delta-summary ${cls}">${arrow} ${word} by ${fmtDiff(absDiff)}</span>`;
+}
+
+function trajectoryRow(label, values, fmt, {deltaFmt, invertColor} = {}) {
+  const dFmt = deltaFmt || fmt;
+  const cells = values.map((v, i) => {
+    let arrow = '';
+    if (i > 0) arrow = deltaArrow(values[i-1], v, dFmt, invertColor);
+    return `${arrow}<div class="traj-cell"><span class="traj-month">${i+1}m</span><span class="traj-val">${fmt(v)}</span></div>`;
+  }).join('');
+  return `<div class="trajectory-row">
+    <div class="traj-label">${label}</div>
+    <div class="traj-cells">${cells}</div>
+  </div>`;
+}
+
+// ── AI Insight helpers (RAG Agent demo) ────────────────────────────────────
+
+/** SVG sparkle icon used for AI insight indicators */
+function aiIcon(size = 24) {
+  return `<svg class="ai-icon-sparkle" xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 48 48">
+    <path fill="#2196f3" d="M23.426,31.911l-1.719,3.936c-0.661,1.513-2.754,1.513-3.415,0l-1.719-3.936	c-1.529-3.503-4.282-6.291-7.716-7.815l-4.73-2.1c-1.504-0.668-1.504-2.855,0-3.523l4.583-2.034	c3.522-1.563,6.324-4.455,7.827-8.077l1.741-4.195c0.646-1.557,2.797-1.557,3.443,0l1.741,4.195	c1.503,3.622,4.305,6.514,7.827,8.077l4.583,2.034c1.504,0.668,1.504,2.855,0,3.523l-4.73,2.1	C27.708,25.62,24.955,28.409,23.426,31.911z"/>
+    <path fill="#7e57c2" d="M38.423,43.248l-0.493,1.131c-0.361,0.828-1.507,0.828-1.868,0l-0.493-1.131	c-0.879-2.016-2.464-3.621-4.44-4.5l-1.52-0.675c-0.822-0.365-0.822-1.56,0-1.925l1.435-0.638c2.027-0.901,3.64-2.565,4.504-4.65	l0.507-1.222c0.353-0.852,1.531-0.852,1.884,0l0.507,1.222c0.864,2.085,2.477,3.749,4.504,4.65l1.435,0.638	c0.822,0.365,0.822,1.56,0,1.925l-1.52,0.675C40.887,39.627,39.303,41.232,38.423,43.248z"/>
+  </svg>`;
+}
+
+/** Tiny inline sparkle icon for section headers */
+function aiInlineBadge() {
+  return `<span class="ai-inline-badge" title="AI-powered insight available">${aiIcon(10)} AI</span>`;
+}
+
+/** Full AI insight card component */
+function aiInsightCard(section, title, text) {
+  return `<div class="ai-insight" data-section="${section}">
+    <div class="ai-icon-wrap">${aiIcon(20)}</div>
+    <div class="ai-body">
+      <div class="ai-header">
+        <span class="ai-title">${title}</span>
+        <span class="ai-badge">${aiIcon(9)} EWS Agent</span>
+      </div>
+      <div class="ai-text">${text}</div>
+    </div>
+  </div>`;
+}
+
+/** Pre-configured insights cache (loaded once, used everywhere) */
+let _aiInsights = null;
+
+async function loadAiInsights() {
+  if (_aiInsights) return _aiInsights;
+  try {
+    const res = await fetch('/demo/ai-insights');
+    if (!res.ok) throw new Error(res.statusText);
+    _aiInsights = await res.json();
+    return _aiInsights;
+  } catch (e) {
+    console.warn('AI insights unavailable:', e.message);
+    _aiInsights = {};
+    return _aiInsights;
+  }
+}
+
+/** Get a rendered insight card for a given section key (returns '' if not available) */
+function getInsightCard(sectionKey) {
+  if (!_aiInsights || !_aiInsights[sectionKey]) return '';
+  const ins = _aiInsights[sectionKey];
+  return aiInsightCard(sectionKey, ins.title, ins.insight);
+}
+
+// Pre-load insights on page load
+loadAiInsights();
+
+// ── Single risk ────────────────────────────────────────────────────────────
+function renderSingleRisk(p, data) {
+  const scores = [p.pred_risk_score_1m, p.pred_risk_score_2m, p.pred_risk_score_3m];
+  const tiers = [p.pred_risk_tier_1m, p.pred_risk_tier_2m, p.pred_risk_tier_3m];
+  const pctFmt = v => (v*100).toFixed(1)+'%';
+  const pctDelta = v => (v*100).toFixed(1)+'pp';
+  return `
+    <h3>Risk Prediction ${p.unique_id ? '— ' + p.unique_id : ''} ${aiInlineBadge()}</h3>
+    <div style="margin: 1rem 0">
+      <span class="tier-badge tier-${p.pred_risk_tier}">${p.pred_risk_tier} RISK</span>
+      <span style="margin-left:.5rem;font-size:.82rem;color:var(--muted)">(3-month headline)</span>
+      ${directionBadge(scores[0], scores[2], pctDelta, true)}
+    </div>
+    ${getInsightCard('risk_single')}
+    <div class="card" style="margin-top:1rem;box-shadow:none;border:1px solid var(--border)">
+      <h3>📈 Risk Score Trajectory</h3>
+      <div style="display:flex;align-items:center;gap:1.5rem;flex-wrap:wrap">
+        ${sparkline(scores, {color:'#d93025', label:'Risk Score'})}
+        <div>${trajectoryRow('Score', scores, pctFmt, {deltaFmt: pctDelta, invertColor: true})}</div>
+      </div>
+      ${trajectoryRow('Tier', tiers, v => `<span class="tier-badge tier-${v}" style="font-size:.7rem;padding:2px 8px">${v}</span>`)}
+    </div>
+    <div class="card" style="margin-top:1rem;box-shadow:none;border:1px solid var(--border)">
+      <h3>Tier Probabilities (3m)</h3>
+      ${probBar('Low', p.pred_risk_tier_low_p, 'low')}
+      ${probBar('Medium', p.pred_risk_tier_medium_p, 'medium')}
+      ${probBar('High', p.pred_risk_tier_high_p, 'high')}
+    </div>
+  `;
+}
+
+function renderBatchRisk(preds, data) {
+  const rows = preds.map((p, i) => {
+    const scores = [p.pred_risk_score_1m, p.pred_risk_score_2m, p.pred_risk_score_3m];
+    const diff = scores[2] - scores[0];
+    const absDiff = Math.abs(diff);
+    const changeCls = absDiff < 0.005 ? 'delta-flat' : (diff > 0 ? 'delta-down' : 'delta-up');
+    const changeLabel = absDiff < 0.005 ? '→ No change'
+      : (diff > 0 ? `↑ +${(absDiff*100).toFixed(1)}pp` : `↓ −${(absDiff*100).toFixed(1)}pp`);
+    return `
+    <tr>
+      <td><span class="clickable-id" onclick="openProfile(${i})">${p.unique_id || '—'}</span></td>
+      <td><span class="tier-badge tier-${p.pred_risk_tier}">${p.pred_risk_tier}</span></td>
+      <td>${(p.pred_risk_score_1m * 100).toFixed(1)}%</td>
+      <td>${(p.pred_risk_score_2m * 100).toFixed(1)}%</td>
+      <td>${(p.pred_risk_score_3m * 100).toFixed(1)}%</td>
+      <td>${sparkline(scores, {color:'#d93025', width:70, height:28})}</td>
+      <td><span class="${changeCls}" style="font-size:.78rem;font-weight:700">${changeLabel}</span></td>
+    </tr>`;
+  }).join('');
+  return `
+    <h3>Risk Predictions — ${preds.length} records ${aiInlineBadge()}</h3>
+    ${getInsightCard('risk_batch')}
+    <table class="results-table">
+      <thead><tr><th>Client</th><th>Tier (3m)</th><th>1m</th><th>2m</th><th>3m</th><th>Trend</th><th>1m → 3m Change</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
+// ── Single employment ──────────────────────────────────────────────────────
+function renderSingleEmployment(p, data) {
+  const jc = [p.pred_jobs_created_1m, p.pred_jobs_created_2m, p.pred_jobs_created_3m].map(Math.round);
+  const jl = [p.pred_jobs_lost_1m, p.pred_jobs_lost_2m, p.pred_jobs_lost_3m].map(Math.round);
+  const net = jc.map((v,i) => v - jl[i]);
+  const intFmt = v => String(v);
+  const intDelta = v => String(v);
+  return `
+    <h3>Employment Prediction ${p.unique_id ? '— ' + p.unique_id : ''} ${aiInlineBadge()}</h3>
+    <div class="result-grid">
+      ${metricCard('Jobs Created (3m)', jc[2] + directionBadge(jc[0], jc[2], intDelta, false))}
+      ${metricCard('Jobs Lost (3m)', jl[2] + directionBadge(jl[0], jl[2], intDelta, true))}
+      ${metricCard('Net Employment (3m)', net[2] + directionBadge(net[0], net[2], intDelta, false))}
+    </div>
+    ${getInsightCard('employment_single')}
+    <div class="card" style="margin-top:1rem;box-shadow:none;border:1px solid var(--border)">
+      <h3>📈 Employment Trajectory</h3>
+      <div style="display:flex;gap:2rem;flex-wrap:wrap;align-items:flex-start">
+        <div style="text-align:center">
+          <div style="font-size:.78rem;color:var(--muted);margin-bottom:.3rem">Jobs Created</div>
+          ${sparkline(jc, {color:'#188038', label:'Jobs Created'})}
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:.78rem;color:var(--muted);margin-bottom:.3rem">Jobs Lost</div>
+          ${sparkline(jl, {color:'#d93025', label:'Jobs Lost'})}
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:.78rem;color:var(--muted);margin-bottom:.3rem">Net</div>
+          ${sparkline(net, {color:'var(--primary)', label:'Net'})}
+        </div>
+      </div>
+      ${trajectoryRow('Created', jc, intFmt, {deltaFmt: intDelta})}
+      ${trajectoryRow('Lost', jl, intFmt, {deltaFmt: intDelta, invertColor: true})}
+      ${trajectoryRow('Net', net, intFmt, {deltaFmt: intDelta})}
+    </div>
+  `;
+}
+
+function renderBatchEmployment(preds, data) {
+  const rows = preds.map((p, i) => {
+    const jc = [p.pred_jobs_created_1m, p.pred_jobs_created_2m, p.pred_jobs_created_3m].map(Math.round);
+    const jl = [p.pred_jobs_lost_1m, p.pred_jobs_lost_2m, p.pred_jobs_lost_3m].map(Math.round);
+    const net3 = jc[2] - jl[2];
+    const netDiff = net3 - (jc[0] - jl[0]);
+    const changeCls = Math.abs(netDiff) < 1 ? 'delta-flat' : (netDiff > 0 ? 'delta-up' : 'delta-down');
+    const changeLabel = Math.abs(netDiff) < 1 ? '→ Stable'
+      : (netDiff > 0 ? `↑ +${Math.abs(netDiff)} jobs` : `↓ −${Math.abs(netDiff)} jobs`);
+    return `
+    <tr>
+      <td><span class="clickable-id" onclick="openProfile(${i})">${p.unique_id || '—'}</span></td>
+      <td>${jc[0]}</td>
+      <td>${jc[1]}</td>
+      <td>${jc[2]}</td>
+      <td>${sparkline(jc, {color:'#188038', width:70, height:28})}</td>
+      <td style="font-weight:700;${net3 > 0 ? 'color:#188038' : net3 < 0 ? 'color:#d93025' : ''}">${net3 > 0 ? '+' : ''}${net3}</td>
+      <td><span class="${changeCls}" style="font-size:.78rem;font-weight:700">${changeLabel}</span></td>
+    </tr>`;
+  }).join('');
+  return `
+    <h3>Employment Predictions — ${preds.length} records ${aiInlineBadge()}</h3>
+    ${getInsightCard('employment_batch')}
+    <table class="results-table">
+      <thead><tr><th>Client</th><th>Created 1m</th><th>2m</th><th>3m</th><th>Trend</th><th>Net (3m)</th><th>Net Change</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
+// ── Single revenue ─────────────────────────────────────────────────────────
+function renderSingleRevenue(p, data) {
+  const revs = [p.pred_revenue_1m, p.pred_revenue_2m, p.pred_revenue_3m];
+  const revFmt = v => '$' + Math.round(v).toLocaleString();
+  const revDelta = v => '$' + Math.round(v).toLocaleString();
+  return `
+    <h3>Revenue Prediction ${p.unique_id ? '— ' + p.unique_id : ''} ${aiInlineBadge()}</h3>
+    <div class="result-grid">
+      ${metricCard('Revenue (1m)', revFmt(revs[0]))}
+      ${metricCard('Revenue (2m)', revFmt(revs[1]))}
+      ${metricCard('Revenue (3m)', revFmt(revs[2]) + directionBadge(revs[0], revs[2], revDelta, false))}
+    </div>
+    ${getInsightCard('revenue_single')}
+    <div class="card" style="margin-top:1rem;box-shadow:none;border:1px solid var(--border)">
+      <h3>📈 Revenue Trajectory</h3>
+      <div style="display:flex;align-items:center;gap:1.5rem;flex-wrap:wrap">
+        ${sparkline(revs, {color:'#188038', label:'Revenue'})}
+        <div>${trajectoryRow('Revenue', revs, revFmt, {deltaFmt: revDelta})}</div>
+      </div>
+    </div>
+  `;
+}
+
+function renderBatchRevenue(preds, data) {
+  const rows = preds.map((p, i) => {
+    const revs = [p.pred_revenue_1m, p.pred_revenue_2m, p.pred_revenue_3m];
+    const diff = Math.round(revs[2] - revs[0]);
+    const absDiff = Math.abs(diff);
+    const changeCls = absDiff < 1 ? 'delta-flat' : (diff > 0 ? 'delta-up' : 'delta-down');
+    const changeLabel = absDiff < 1 ? '→ Stable'
+      : (diff > 0 ? `↑ +$${absDiff.toLocaleString()}` : `↓ −$${absDiff.toLocaleString()}`);
+    return `
+    <tr>
+      <td><span class="clickable-id" onclick="openProfile(${i})">${p.unique_id || '—'}</span></td>
+      <td>$${Math.round(p.pred_revenue_1m).toLocaleString()}</td>
+      <td>$${Math.round(p.pred_revenue_2m).toLocaleString()}</td>
+      <td>$${Math.round(p.pred_revenue_3m).toLocaleString()}</td>
+      <td>${sparkline(revs, {color:'#188038', width:70, height:28})}</td>
+      <td><span class="${changeCls}" style="font-size:.78rem;font-weight:700">${changeLabel}</span></td>
+    </tr>`;
+  }).join('');
+  return `
+    <h3>Revenue Predictions — ${preds.length} records ${aiInlineBadge()}</h3>
+    ${getInsightCard('revenue_batch')}
+    <table class="results-table">
+      <thead><tr><th>Client</th><th>1m</th><th>2m</th><th>3m</th><th>Trend</th><th>1m → 3m Change</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
+// ── UI components ──────────────────────────────────────────────────────────
+function metricCard(label, value) {
+  return `<div class="metric-card"><div class="label">${label}</div><div class="value">${value}</div></div>`;
+}
+
+function probBar(label, prob, cls) {
+  const pct = (prob * 100).toFixed(1);
+  return `
+    <div class="prob-bar-wrap">
+      <div class="prob-bar-label"><span>${label}</span><span>${pct}%</span></div>
+      <div class="prob-bar"><div class="prob-bar-fill ${cls}" style="width:${pct}%"></div></div>
+    </div>
+  `;
+}
+
+// ── Client Profile Modal ───────────────────────────────────────────────────
+function openProfile(idx) {
+  const record = _inputCache[idx];
+  if (!record) return;
+
+  const modal = document.getElementById('profile-modal');
+  const body  = document.getElementById('profile-body');
+  const title = document.getElementById('profile-title');
+
+  title.textContent = 'Client Profile' + (record.unique_id ? ' — ' + record.unique_id : '');
+  body.innerHTML = '<div class="empty-state"><span class="spinner" style="border-color:var(--primary);border-top-color:var(--primary-light)"></span> Running all models…</div>';
+  modal.classList.add('open');
+  document.body.style.overflow = 'hidden';
+
+  fetch('/demo/client-profile', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(record),
+  })
+    .then(r => {
+      if (!r.ok) throw new Error(r.statusText);
+      return r.json();
+    })
+    .then(profile => renderProfile(body, profile, record))
+    .catch(err => {
+      body.innerHTML = '<div class="error-msg">Failed to load profile: ' + err.message + '</div>';
+    });
+}
+
+function closeProfile() {
+  document.getElementById('profile-modal').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+// Close on Escape key
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeProfile(); });
+
+function renderProfile(container, profile, record) {
+  // ── Categorise input fields ──────────────────────────────────────────
+  const demoFields = ['unique_id','age','gender','education_level','refugee_status','country','city'];
+  const bizFields  = ['business_sector','business_type','program_enrolled','training_type','years_in_business','business_size','number_of_employees','has_loan','loan_amount','savings_amount','revenue_last_month','monthly_expenses'];
+  const allKeys = Object.keys(record);
+  const otherFields = allKeys.filter(k => !demoFields.includes(k) && !bizFields.includes(k));
+
+  function fieldCards(keys) {
+    return keys.filter(k => record[k] !== undefined && record[k] !== null)
+      .map(k => `<div class="profile-field"><div class="pf-label">${k.replace(/_/g, ' ')}</div><div class="pf-value">${record[k]}</div></div>`)
+      .join('');
+  }
+
+  let html = '';
+
+  // ── Demographics ─────────────────────────────────────────────────────
+  html += `<div class="profile-section">
+    <h4><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> Demographics</h4>
+    <div class="profile-grid">${fieldCards(demoFields)}</div>
+  </div>`;
+
+  // ── Business Info ────────────────────────────────────────────────────
+  const bizHtml = fieldCards(bizFields);
+  if (bizHtml) {
+    html += `<div class="profile-section">
+      <h4><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg> Business Information</h4>
+      <div class="profile-grid">${bizHtml}</div>
+    </div>`;
+  }
+
+  // ── Other Features ───────────────────────────────────────────────────
+  if (otherFields.length) {
+    html += `<div class="profile-section">
+      <h4><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> Additional Features (${otherFields.length})</h4>
+      <details><summary style="cursor:pointer;font-size:.82rem;color:var(--primary);margin-bottom:.5rem">Show all ${otherFields.length} features</summary>
+      <div class="profile-grid">${fieldCards(otherFields)}</div>
+      </details>
+    </div>`;
+  }
+
+  // ── AI Profile Insight ───────────────────────────────────────────────
+  html += getInsightCard('profile_overview');
+
+  // ── Risk Pipeline ────────────────────────────────────────────────────
+  const r = profile.risk;
+  html += '<div class="profile-section"><h4><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Risk Pipeline</h4>';
+  if (r && !r.error) {
+    const rScores = [r.pred_risk_score_1m, r.pred_risk_score_2m, r.pred_risk_score_3m];
+    const rTiers  = [r.pred_risk_tier_1m, r.pred_risk_tier_2m, r.pred_risk_tier_3m];
+    const pctFmt = v => (v*100).toFixed(1)+'%';
+    const pctDelta = v => (v*100).toFixed(1)+'pp';
+    html += `<div class="profile-pipeline">
+      <h5>Risk Tier: <span class="tier-badge tier-${r.pred_risk_tier}">${r.pred_risk_tier}</span>${directionBadge(rScores[0], rScores[2], pctDelta, true)}</h5>
+      <div style="display:flex;align-items:center;gap:1.5rem;flex-wrap:wrap;margin-top:.5rem">
+        ${sparkline(rScores, {color:'#d93025', label:'Risk Score'})}
+        <div>${trajectoryRow('Score', rScores, pctFmt, {deltaFmt: pctDelta, invertColor: true})}</div>
+      </div>
+      ${trajectoryRow('Tier', rTiers, v => `<span class="tier-badge tier-${v}" style="font-size:.7rem;padding:2px 8px">${v}</span>`)}
+      <div style="margin-top:.6rem">
+        ${probBar('Low', r.pred_risk_tier_low_p, 'low')}
+        ${probBar('Medium', r.pred_risk_tier_medium_p, 'medium')}
+        ${probBar('High', r.pred_risk_tier_high_p, 'high')}
+      </div>
+    </div>`;
+  } else {
+    html += `<div class="profile-pipeline"><span class="error-text">⚠ ${r ? r.error : 'unavailable'}</span></div>`;
+  }
+  html += '</div>';
+
+  // ── Employment Pipeline ──────────────────────────────────────────────
+  const e = profile.employment;
+  html += '<div class="profile-section"><h4><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg> Employment Pipeline</h4>';
+  if (e && !e.error) {
+    const eJC = [e.pred_jobs_created_1m, e.pred_jobs_created_2m, e.pred_jobs_created_3m].map(Math.round);
+    const eJL = [e.pred_jobs_lost_1m, e.pred_jobs_lost_2m, e.pred_jobs_lost_3m].map(Math.round);
+    const eNet = eJC.map((v,i) => v - eJL[i]);
+    const intFmt = v => String(v);
+    const intDelta = v => String(v);
+    html += `<div class="profile-pipeline">
+      <div style="display:flex;gap:2rem;flex-wrap:wrap;align-items:flex-start">
+        <div style="text-align:center">
+          <div style="font-size:.78rem;color:var(--muted);margin-bottom:.3rem">Jobs Created ${directionBadge(eJC[0], eJC[2], intDelta, false)}</div>
+          ${sparkline(eJC, {color:'#188038', label:'Jobs Created'})}
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:.78rem;color:var(--muted);margin-bottom:.3rem">Jobs Lost ${directionBadge(eJL[0], eJL[2], intDelta, true)}</div>
+          ${sparkline(eJL, {color:'#d93025', label:'Jobs Lost'})}
+        </div>
+      </div>
+      ${trajectoryRow('Created', eJC, intFmt, {deltaFmt: intDelta})}
+      ${trajectoryRow('Lost', eJL, intFmt, {deltaFmt: intDelta, invertColor: true})}
+      ${trajectoryRow('Net', eNet, intFmt, {deltaFmt: intDelta})}
+    </div>`;
+  } else {
+    html += `<div class="profile-pipeline"><span class="error-text">⚠ ${e ? e.error : 'unavailable'}</span></div>`;
+  }
+  html += '</div>';
+
+  // ── Revenue Pipeline ─────────────────────────────────────────────────
+  const v = profile.revenue;
+  html += '<div class="profile-section"><h4><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg> Revenue Pipeline</h4>';
+  if (v && !v.error) {
+    const vRevs = [v.pred_revenue_1m, v.pred_revenue_2m, v.pred_revenue_3m];
+    const revFmt = val => '$'+Math.round(val).toLocaleString();
+    const revDelta = val => '$'+Math.round(val).toLocaleString();
+    html += `<div class="profile-pipeline">
+      <div style="display:flex;align-items:center;gap:1.5rem;flex-wrap:wrap">
+        ${sparkline(vRevs, {color:'#188038', label:'Revenue'})}
+        <div>${trajectoryRow('Revenue', vRevs, revFmt, {deltaFmt: revDelta})}</div>
+      </div>
+      <div style="margin-top:.3rem">${directionBadge(vRevs[0], vRevs[2], revDelta, false)}</div>
+    </div>`;
+  } else {
+    html += `<div class="profile-pipeline"><span class="error-text">⚠ ${v ? v.error : 'unavailable'}</span></div>`;
+  }
+  html += '</div>';
+
+  container.innerHTML = html;
+}
+
+// ── Dashboard Analytics ────────────────────────────────────────────────────
+const _chartInstances = [];
+
+function destroyCharts() {
+  while (_chartInstances.length) _chartInstances.pop().destroy();
+}
+
+async function loadDashboard() {
+  const source = document.getElementById('dash-source-select').value;
+  const container = document.getElementById('dash-content');
+  container.innerHTML = '<div class="empty-state"><span class="spinner" style="border-color:var(--primary);border-top-color:var(--primary-light)"></span> Computing analytics\u2026</div>';
+  destroyCharts();
+
+  try {
+    const res = await fetch('/demo/analytics?source=' + source);
+    if (!res.ok) throw new Error(res.statusText);
+    const data = await res.json();
+    renderDashboard(container, data);
+  } catch (e) {
+    container.innerHTML = '<div class="error-msg">Failed to load analytics: ' + e.message + '</div>';
+  }
+}
+
+function renderDashboard(container, data) {
+  let html = '';
+
+  // ── Source info ──────────────────────────────────────────
+  html += `<div class="dash-source" style="margin-top:0"><span>Source: <strong>${data.source}</strong> \u2014 ${data.total_records} records, ${data.total_columns} columns</span></div>`;
+
+  // ── KPI Row ─────────────────────────────────────────────
+  const k = data.kpis || {};
+  html += '<div class="kpi-row">';
+  if (k.total_records || data.total_records) html += kpiCard('Total Records', (data.total_records || 0).toLocaleString(), '');
+  if (k.unique_clients) html += kpiCard('Unique Clients', k.unique_clients.toLocaleString(), '');
+  if (k.avg_age) html += kpiCard('Avg Age', k.avg_age, '');
+  if (k.avg_revenue !== undefined) html += kpiCard('Avg Revenue', '$' + k.avg_revenue.toLocaleString(), 'green');
+  if (k.total_revenue !== undefined) html += kpiCard('Total Revenue', '$' + Math.round(k.total_revenue).toLocaleString(), 'green');
+  if (k.avg_expenses !== undefined) html += kpiCard('Avg Expenses', '$' + k.avg_expenses.toLocaleString(), 'orange');
+  if (k.avg_rev_expense_ratio !== undefined) html += kpiCard('Rev/Expense Ratio', k.avg_rev_expense_ratio + 'x', 'green');
+  if (k.total_jobs_created !== undefined) html += kpiCard('Total Jobs Created', k.total_jobs_created.toLocaleString(), 'green');
+  html += '</div>';
+  html += getInsightCard('dashboard_kpi');
+
+  // ── Charts section ──────────────────────────────────────
+  html += '<div class="dash-section"><h3><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg> Distributions ' + aiInlineBadge() + '</h3>';
+  html += '<div class="chart-grid">';
+
+  const chartQueue = [];
+  const dist = data.distributions || {};
+  const hists = data.histograms || {};
+  const cross = data.cross_tabs || {};
+
+  const catChartConfigs = [
+    { key: 'gender', title: 'Gender Distribution', type: 'doughnut' },
+    { key: 'risk_tier_3m', title: 'Risk Tier Distribution', type: 'doughnut' },
+    { key: 'strata_impact', title: 'Host vs Refugee', type: 'doughnut' },
+    { key: 'business_sector', title: 'Business Sector', type: 'bar' },
+    { key: 'education_level', title: 'Education Level', type: 'bar' },
+    { key: 'nationality', title: 'Nationality', type: 'bar' },
+    { key: 'client_location', title: 'Client Location (Top 10)', type: 'bar' },
+    { key: 'survey_name', title: 'Survey Distribution', type: 'doughnut' },
+    { key: 'is_business_registered', title: 'Business Registered', type: 'doughnut' },
+    { key: 'have_bank_account', title: 'Bank Account', type: 'doughnut' },
+    { key: 'only_income_earner', title: 'Only Income Earner', type: 'doughnut' },
+    { key: 'business_challenges', title: 'Business Challenges', type: 'bar' },
+  ];
+
+  catChartConfigs.forEach(cfg => {
+    if (!dist[cfg.key]) return;
+    const id = 'chart-' + cfg.key;
+    html += `<div class="chart-card"><h4>${cfg.title}</h4><canvas id="${id}"></canvas></div>`;
+    chartQueue.push({ id, labels: Object.keys(dist[cfg.key]), values: Object.values(dist[cfg.key]), type: cfg.type, title: cfg.title });
+  });
+
+  const histConfigs = [
+    { key: 'age', title: 'Age Distribution' },
+    { key: 'revenue', title: 'Revenue Distribution' },
+    { key: 'hh_expense', title: 'Household Expense Distribution' },
+    { key: 'monthly_customer', title: 'Monthly Customers' },
+    { key: 'risk_score_3m', title: 'Risk Score Distribution' },
+    { key: 'revenue_3m', title: 'Revenue (3m) Distribution' },
+    { key: 'revenue_to_expense_ratio', title: 'Rev/Expense Ratio Distribution' },
+  ];
+
+  histConfigs.forEach(cfg => {
+    if (!hists[cfg.key] || !hists[cfg.key].labels.length) return;
+    const id = 'hist-' + cfg.key;
+    html += `<div class="chart-card"><h4>${cfg.title}</h4><canvas id="${id}"></canvas></div>`;
+    chartQueue.push({ id, labels: hists[cfg.key].labels, values: hists[cfg.key].counts, type: 'bar', title: cfg.title, isHist: true });
+  });
+
+  const crossConfigs = [
+    { key: 'sector_avg_revenue', title: 'Avg Revenue by Sector' },
+    { key: 'sector_avg_jobs', title: 'Avg Jobs Created by Sector' },
+    { key: 'gender_avg_revenue', title: 'Avg Revenue by Gender' },
+    { key: 'education_avg_revenue', title: 'Avg Revenue by Education' },
+    { key: 'location_avg_revenue', title: 'Avg Revenue by Location' },
+    { key: 'nationality_avg_revenue', title: 'Avg Revenue by Nationality' },
+    { key: 'strata_avg_revenue', title: 'Avg Revenue: Host vs Refugee' },
+    { key: 'strata_avg_risk_score', title: 'Avg Risk Score: Host vs Refugee' },
+    { key: 'gender_avg_risk_score', title: 'Avg Risk Score by Gender' },
+  ];
+
+  crossConfigs.forEach(cfg => {
+    if (!cross[cfg.key] || !Object.keys(cross[cfg.key]).length) return;
+    const id = 'cross-' + cfg.key;
+    html += `<div class="chart-card"><h4>${cfg.title}</h4><canvas id="${id}"></canvas></div>`;
+    chartQueue.push({ id, labels: Object.keys(cross[cfg.key]), values: Object.values(cross[cfg.key]), type: 'bar', title: cfg.title, isCross: true });
+  });
+
+  html += '</div></div>';
+  html += getInsightCard('dashboard_distributions');
+
+  // ── Numeric Statistics Table ────────────────────────────
+  const nstats = data.numeric_stats || {};
+  const nkeys = Object.keys(nstats);
+  if (nkeys.length) {
+    html += '<div class="dash-section"><h3><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Numeric Statistics ' + aiInlineBadge() + '</h3>';
+    html += '<div style="overflow-x:auto"><table class="stat-table"><thead><tr><th>Column</th><th>Count</th><th>Mean</th><th>Median</th><th>Std</th><th>Min</th><th>Q25</th><th>Q75</th><th>Max</th></tr></thead><tbody>';
+    nkeys.forEach(k => {
+      const s = nstats[k];
+      html += `<tr><td><strong>${k.replace(/_/g, ' ')}</strong></td><td>${s.count}</td><td>${s.mean}</td><td>${s.median}</td><td>${s.std}</td><td>${s.min}</td><td>${s.q25}</td><td>${s.q75}</td><td>${s.max}</td></tr>`;
+    });
+    html += '</tbody></table></div></div>';
+    html += getInsightCard('dashboard_statistics');
+  }
+
+  // ── Correlation Matrix ─────────────────────────────────
+  if (data.correlation) {
+    const cols = data.correlation.columns;
+    const matrix = data.correlation.matrix;
+    html += '<div class="dash-section"><h3><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/></svg> Correlation Matrix ' + aiInlineBadge() + '</h3>';
+    html += '<div style="overflow-x:auto"><table class="stat-table corr-table"><thead><tr><th></th>';
+    cols.forEach(c => html += `<th>${c.replace(/_/g, ' ').substring(0, 15)}</th>`);
+    html += '</tr></thead><tbody>';
+    matrix.forEach((row, i) => {
+      html += `<tr><td><strong>${cols[i].replace(/_/g, ' ').substring(0, 15)}</strong></td>`;
+      row.forEach(v => {
+        const bg = corrColor(v);
+        html += `<td><span class="corr-cell" style="background:${bg};padding:2px 6px;display:inline-block;min-width:3rem">${v.toFixed(2)}</span></td>`;
+      });
+      html += '</tr>';
+    });
+    html += '</tbody></table></div></div>';
+    html += getInsightCard('dashboard_correlation');
+  }
+
+  container.innerHTML = html;
+
+  // ── Render Chart.js charts ─────────────────────────────
+  const palette = ['#1a73e8','#34a853','#fbbc04','#ea4335','#673ab7','#00bcd4','#ff9800','#e91e63','#009688','#795548','#607d8b','#3f51b5'];
+
+  chartQueue.forEach(cfg => {
+    const ctx = document.getElementById(cfg.id);
+    if (!ctx) return;
+
+    let chartObj;
+    if (cfg.type === 'doughnut') {
+      chartObj = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: cfg.labels,
+          datasets: [{ data: cfg.values, backgroundColor: palette.slice(0, cfg.labels.length), borderWidth: 1 }]
+        },
+        options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { font: { size: 11 } } } } }
+      });
+    } else {
+      const bgColor = cfg.isHist ? 'rgba(26,115,232,.6)' : (cfg.isCross ? 'rgba(52,168,83,.6)' : palette.slice(0, cfg.labels.length));
+      const borderColor = cfg.isHist ? 'rgba(26,115,232,1)' : (cfg.isCross ? 'rgba(52,168,83,1)' : palette.slice(0, cfg.labels.length));
+      chartObj = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: cfg.labels,
+          datasets: [{ label: cfg.title, data: cfg.values, backgroundColor: bgColor, borderColor: borderColor, borderWidth: 1 }]
+        },
+        options: {
+          responsive: true,
+          indexAxis: cfg.labels.length > 6 && !cfg.isHist ? 'y' : 'x',
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ticks: { font: { size: 10 }, maxRotation: 45 } },
+            y: { ticks: { font: { size: 10 } }, beginAtZero: true }
+          }
+        }
+      });
+    }
+    _chartInstances.push(chartObj);
+  });
+}
+
+function kpiCard(label, value, colorClass) {
+  return `<div class="kpi-card ${colorClass}"><div class="kpi-label">${label}</div><div class="kpi-value">${value}</div></div>`;
+}
+
+function corrColor(v) {
+  const abs = Math.min(Math.abs(v), 1);
+  if (v >= 0) return `rgba(26,115,232,${(abs * 0.8 + 0.15).toFixed(2)})`;
+  return `rgba(217,48,37,${(abs * 0.8 + 0.15).toFixed(2)})`;
+}
+
+// ── Retrain Models ─────────────────────────────────────────────────────────
+
+const _pipelineTargets = {
+  risk:       ['risk_tier_1m','risk_tier_2m','risk_tier_3m','risk_score_1m','risk_score_2m','risk_score_3m'],
+  employment: ['jobs_created_1m','jobs_created_2m','jobs_created_3m','jobs_lost_1m','jobs_lost_2m','jobs_lost_3m'],
+  revenue:    ['revenue_1m','revenue_2m','revenue_3m'],
+};
+
+function selectPipeline(el) {
+  document.querySelectorAll('.pipeline-option').forEach(o => o.classList.remove('selected'));
+  el.classList.add('selected');
+  document.getElementById('retrain-pipeline').value = el.dataset.pipeline;
+  updateRetrainReqs();
+}
+
+function updateRetrainReqs() {
+  const pipeline = document.getElementById('retrain-pipeline').value;
+  const tags = _pipelineTargets[pipeline] || [];
+  const container = document.getElementById('retrain-req-tags');
+  container.innerHTML = tags.map(t => `<span class="retrain-req-tag">${t}</span>`).join('');
+}
+
+// Initialize requirements for default selection
+updateRetrainReqs();
+
+const retrainFileInput = document.getElementById('retrain-file');
+const retrainFileLabel = document.getElementById('retrain-file-label');
+const retrainBtn = document.getElementById('retrain-btn');
+
+retrainFileInput.addEventListener('change', () => {
+  const f = retrainFileInput.files[0];
+  if (f) {
+    retrainFileLabel.textContent = 'Selected: ' + f.name + ' (' + (f.size / 1024).toFixed(1) + ' KB)';
+    retrainBtn.disabled = false;
+  } else {
+    retrainFileLabel.textContent = '';
+    retrainBtn.disabled = true;
+  }
+});
+
+const retrainUpload = document.getElementById('retrain-upload');
+retrainUpload.addEventListener('dragover', e => { e.preventDefault(); retrainUpload.classList.add('dragover'); });
+retrainUpload.addEventListener('dragleave', () => retrainUpload.classList.remove('dragover'));
+retrainUpload.addEventListener('drop', e => {
+  e.preventDefault();
+  retrainUpload.classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if (file) {
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    retrainFileInput.files = dt.files;
+    retrainFileInput.dispatchEvent(new Event('change'));
+  }
+});
+
+async function retrainModel() {
+  const pipeline = document.getElementById('retrain-pipeline').value;
+  const file = retrainFileInput.files[0];
+  if (!file) return;
+
+  const errEl = document.getElementById('retrain-error');
+  const progressEl = document.getElementById('retrain-progress');
+  const progressText = document.getElementById('retrain-progress-text');
+  const resultsCard = document.getElementById('retrain-results');
+  const resultsBody = document.getElementById('retrain-results-body');
+
+  errEl.textContent = '';
+  resultsCard.style.display = 'none';
+  progressEl.classList.add('visible');
+  progressText.textContent = `Training ${pipeline} pipeline with ${file.name}… This may take a minute.`;
+  retrainBtn.disabled = true;
+  retrainBtn.innerHTML = '<span class="spinner"></span>Training…';
+
+  try {
+    const form = new FormData();
+    form.append('file', file);
+
+    const res = await fetch('/demo/retrain?pipeline=' + pipeline, {
+      method: 'POST',
+      body: form,
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.detail || 'Training failed');
+    }
+
+    progressEl.classList.remove('visible');
+    resultsCard.style.display = '';
+    renderRetrainResults(resultsBody, data);
+
+  } catch (e) {
+    errEl.textContent = 'Retraining failed: ' + e.message;
+    progressEl.classList.remove('visible');
+  } finally {
+    retrainBtn.disabled = false;
+    retrainBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:.3rem"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg> Start Retraining';
+  }
+}
+
+function renderRetrainResults(container, data) {
+  let html = '';
+
+  html += `<div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.75rem">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
+    <strong style="color:var(--success)">Training completed successfully!</strong>
+  </div>`;
+
+  html += '<div class="retrain-metric-grid">';
+  html += metricCard('Pipeline', data.pipeline.toUpperCase());
+  html += metricCard('Train Rows', data.train_rows.toLocaleString());
+  html += metricCard('Test Rows', data.test_rows.toLocaleString());
+  html += metricCard('Features', data.feature_count);
+  html += metricCard('Models Reloaded', data.models_reloaded ? 'Yes' : 'No');
+  html += '</div>';
+
+  html += '<h4 style="margin-top:1rem;font-size:.9rem;color:var(--muted)">Model Metrics</h4>';
+
+  data.models_trained.forEach(m => {
+    html += `<div class="model-sub-card">
+      <h5>${m.model.replace(/_/g, ' ')} <span class="algo-badge">${m.algorithm}</span></h5>
+      <div class="retrain-metric-grid">`;
+
+    if (m.type === 'classification') {
+      if (m.auc_macro !== undefined) html += metricCard('AUC (macro)', m.auc_macro.toFixed(4));
+      if (m.accuracy !== undefined) html += metricCard('Accuracy', (m.accuracy * 100).toFixed(1) + '%');
+      if (m.f1_weighted !== undefined) html += metricCard('F1 (weighted)', m.f1_weighted.toFixed(4));
+    } else {
+      if (m.rmse !== undefined) html += metricCard('RMSE', m.rmse.toFixed(4));
+      if (m.mae !== undefined) html += metricCard('MAE', m.mae.toFixed(4));
+    }
+
+    html += '</div></div>';
+  });
+
+  if (data.models_saved) {
+    html += '<h4 style="margin-top:1rem;font-size:.9rem;color:var(--muted)">Saved Model Files</h4>';
+    html += '<div style="font-size:.82rem;margin-top:.3rem">';
+    Object.entries(data.models_saved).forEach(([k, v]) => {
+      html += `<div style="padding:.2rem 0"><code>${v}</code> <span style="color:var(--muted)">← ${k}</span></div>`;
+    });
+    html += '</div>';
+  }
+
+  html += `<div style="margin-top:1rem;font-size:.75rem;color:var(--muted)">Trained at: ${data.timestamp}</div>`;
+
+  html += `<button class="btn btn-outline btn-sm" style="margin-top:.75rem" onclick="this.nextElementSibling.classList.toggle('show')">Toggle Raw JSON</button>`;
+  html += `<div class="raw-json"><pre>${JSON.stringify(data, null, 2)}</pre></div>`;
+
+  container.innerHTML = html;
+}
+
+// ── Model Cards ────────────────────────────────────────────────────────────
+
+let _modelCardsLoaded = false;
+
+async function loadModelCards() {
+  const container = document.getElementById('modelcards-content');
+  container.innerHTML = '<div class="empty-state"><span class="spinner" style="border-color:var(--primary);border-top-color:var(--primary-light)"></span> Loading model cards\u2026</div>';
+
+  try {
+    const res = await fetch('/demo/model-cards');
+    if (!res.ok) throw new Error(res.statusText);
+    const data = await res.json();
+    renderModelCards(container, data);
+    _modelCardsLoaded = true;
+  } catch (e) {
+    container.innerHTML = '<div class="error-msg">Failed to load model cards: ' + e.message + '</div>';
+  }
+}
+
+// Auto-load when tab first visited
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  if (btn.dataset.tab === 'modelcards') {
+    btn.addEventListener('click', () => { if (!_modelCardsLoaded) loadModelCards(); });
+  }
+});
+
+/* ── Metric quality helpers ──────────────────────────────────────────── */
+
+function getMetricQuality(value, interpretation) {
+  if (!interpretation) return { label: '', css: '' };
+  const lowerBetter = interpretation.lower_is_better;
+  if (lowerBetter) {
+    if (value <= interpretation.excellent) return { label: 'Excellent', css: 'excellent' };
+    if (value <= interpretation.good) return { label: 'Good', css: 'good' };
+    if (value <= interpretation.fair) return { label: 'Fair', css: 'fair' };
+    return { label: 'Needs work', css: 'poor' };
+  } else {
+    if (value >= interpretation.excellent) return { label: 'Excellent', css: 'excellent' };
+    if (value >= interpretation.good) return { label: 'Good', css: 'good' };
+    if (value >= interpretation.fair) return { label: 'Fair', css: 'fair' };
+    return { label: 'Needs work', css: 'poor' };
+  }
+}
+
+function getBarPercent(value, interpretation) {
+  if (!interpretation) return 50;
+  const lowerBetter = interpretation.lower_is_better;
+  if (lowerBetter) {
+    // invert: smaller = better = wider bar, cap 0..1
+    const worst = (interpretation.fair || 0.5) * 1.5;
+    return Math.min(100, Math.max(5, (1 - value / worst) * 100));
+  } else {
+    return Math.min(100, Math.max(5, value * 100));
+  }
+}
+
+function getBarColor(quality) {
+  switch (quality) {
+    case 'excellent': return '#059669';
+    case 'good': return 'var(--primary)';
+    case 'fair': return '#d97706';
+    default: return 'var(--danger)';
+  }
+}
+
+/* ── Main render ─────────────────────────────────────────────────────── */
+
+function renderModelCards(container, data) {
+  let html = '';
+
+  // ── AI Insight for Model Cards ──
+  html += getInsightCard('model_cards');
+
+  const pipelineConfigs = [
+    { key: 'risk', cssClass: '', icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>', color: 'var(--primary)' },
+    { key: 'employment', cssClass: 'emp', icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>', color: 'var(--success)' },
+    { key: 'revenue', cssClass: 'rev', icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>', color: 'var(--warn)' },
+  ];
+
+  pipelineConfigs.forEach(cfg => {
+    const card = data[cfg.key];
+    if (!card) return;
+
+    html += `<div class="pipeline-card ${cfg.cssClass}">`;
+
+    // ── Header ──
+    html += `<h3>${cfg.icon} ${card.pipeline} Pipeline</h3>`;
+    if (card.purpose) {
+      html += `<div class="pipeline-purpose">${card.purpose}</div>`;
+    }
+
+    // ── Summary pills ──
+    html += '<div class="mc-stat-pills">';
+    html += `<div class="mc-stat-pill"><span class="pill-value">${card.num_models}</span><span class="pill-label">Model${card.num_models > 1 ? 's' : ''}</span></div>`;
+    html += `<div class="mc-stat-pill"><span class="pill-value">${card.feature_count}</span><span class="pill-label">Input Features</span></div>`;
+    const modelTypes = [...new Set((card.models || []).map(m => m.algorithm))];
+    html += `<div class="mc-stat-pill"><span class="pill-value">${modelTypes.join(', ')}</span><span class="pill-label">Algorithm${modelTypes.length > 1 ? 's' : ''}</span></div>`;
+    html += '</div>';
+
+    // ── Section 1: What It Predicts ──
+    if (card.what_it_predicts && card.what_it_predicts.length > 0) {
+      html += '<div class="mc-section">';
+      html += '<div class="mc-section-title">🎯 What It Predicts</div>';
+      card.what_it_predicts.forEach(t => {
+        const isClassifier = t.target.includes('tier');
+        html += `<div class="predict-target-card">`;
+        html += `<div class="target-icon ${isClassifier ? 'cls' : 'reg'}">${isClassifier ? '🏷️' : '📈'}</div>`;
+        html += `<div>`;
+        html += `<div class="target-name">${t.label} <code>${t.target}</code></div>`;
+        html += `<div class="target-desc">${t.explanation}</div>`;
+        html += `</div></div>`;
+      });
+      html += '</div>';
+    }
+
+    // ── Section 2: Performance Metrics ──
+    const tm = card.training_metrics || {};
+    const me = card.metric_explanations || {};
+    if (Object.keys(tm).length > 0) {
+      html += '<div class="mc-section">';
+      html += '<div class="mc-section-title">📊 Performance (Training Evaluation)</div>';
+      html += '<div class="mc-metrics-grid">';
+
+      if (cfg.key === 'risk') {
+        // Risk has top-level metrics
+        ['auc_macro', 'qwk', 'brier_high_risk'].forEach(mk => {
+          const val = tm[mk];
+          if (val === undefined) return;
+          const info = me[mk] || {};
+          const interp = info.interpretation;
+          const q = getMetricQuality(val, interp);
+          const barPct = getBarPercent(val, interp);
+          const barCol = getBarColor(q.css);
+
+          html += `<div class="mc-metric-card">`;
+          html += `<div class="mc-metric-header">`;
+          html += `<span class="mc-metric-name">${info.label || mk}</span>`;
+          html += `<span class="mc-metric-value quality-${q.css}">${val.toFixed(4)}</span>`;
+          html += `</div>`;
+          html += `<div class="mc-metric-bar"><div class="mc-metric-bar-fill" style="width:${barPct}%;background:${barCol}"></div></div>`;
+          if (q.label) html += `<span class="mc-metric-quality-label ${q.css}">${q.label}</span>`;
+          if (info.explanation) html += `<div class="mc-metric-explain">${info.explanation}</div>`;
+          html += `</div>`;
+        });
+      } else {
+        // Employment / Revenue have per-target metrics
+        Object.entries(tm).forEach(([tgt, m]) => {
+          ['rmse', 'mae'].forEach(mk => {
+            if (m[mk] === undefined) return;
+            const info = me[mk] || {};
+            html += `<div class="mc-metric-card">`;
+            html += `<div class="mc-metric-header">`;
+            html += `<span class="mc-metric-name">${(info.label || mk.toUpperCase())} <span style="font-size:.72rem;color:var(--muted);font-weight:400">(${tgt})</span></span>`;
+            html += `<span class="mc-metric-value" style="color:var(--text)">${m[mk].toFixed(4)}</span>`;
+            html += `</div>`;
+            if (info.explanation) html += `<div class="mc-metric-explain">${info.explanation}</div>`;
+            html += `</div>`;
+          });
+        });
+      }
+
+      html += '</div></div>';
+    }
+
+    // ── Section 3: Model Details ──
+    if (card.models && card.models.length > 0) {
+      html += '<div class="mc-section">';
+      html += '<div class="mc-section-title">⚙️ Model Details</div>';
+
+      (card.models || []).forEach(m => {
+        html += `<div class="model-sub-card">`;
+        const typeBadge = m.type === 'classification'
+          ? '<span class="type-badge classifier">Classifier</span>'
+          : '<span class="type-badge regressor">Regressor</span>';
+        html += `<h5>${m.name.replace(/_/g, ' ')} <span class="algo-badge">${m.algorithm}</span> ${typeBadge} <span style="font-size:.72rem;color:var(--muted);font-weight:400">→ ${m.target}</span></h5>`;
+
+        if (m.file) {
+          html += `<div class="file-info">📁 <strong>${m.file}</strong> &nbsp;|&nbsp; ${m.size_mb} MB &nbsp;|&nbsp; Last modified: ${new Date(m.last_modified).toLocaleString()}</div>`;
+        }
+
+        // Feature importance
+        const fi = m.feature_importance || [];
+        if (fi.length > 0) {
+          const maxImp = fi[0].importance;
+          html += '<details style="margin-top:.5rem"><summary style="cursor:pointer;font-size:.82rem;color:var(--primary)">🔍 Feature Importance — top ' + fi.length + ' features driving this model\'s predictions</summary>';
+          html += '<div style="margin-top:.4rem;font-size:.72rem;color:var(--muted);margin-bottom:.3rem">Higher bars indicate features the model relies on most heavily when making predictions.</div>';
+          html += '<div style="margin-top:.3rem">';
+          fi.forEach((f, i) => {
+            const pct = maxImp > 0 ? (f.importance / maxImp * 100).toFixed(1) : 0;
+            html += `<div class="importance-bar-wrap">
+              <div class="importance-label"><span>${i + 1}. ${f.feature}</span><span>${f.importance.toFixed(4)}</span></div>
+              <div class="importance-bar"><div class="importance-bar-fill" style="width:${pct}%"></div></div>
+            </div>`;
+          });
+          html += '</div></details>';
+        }
+
+        // Hyperparameters
+        const params = m.hyperparameters || {};
+        const paramKeys = Object.keys(params).filter(k => params[k] !== null && params[k] !== undefined);
+        if (paramKeys.length > 0) {
+          html += '<details style="margin-top:.4rem"><summary style="cursor:pointer;font-size:.82rem;color:var(--primary)">🛠️ Hyperparameters (' + paramKeys.length + ' settings)</summary>';
+          html += '<div style="margin-top:.3rem;font-size:.72rem;color:var(--muted);margin-bottom:.3rem">Configuration values controlling the model\'s learning behaviour and complexity.</div>';
+          html += '<div class="params-grid">';
+          paramKeys.forEach(k => {
+            html += `<div class="param-item"><span class="pk">${k}:</span> <span class="pv">${params[k]}</span></div>`;
+          });
+          html += '</div></details>';
+        }
+
+        html += '</div>';
+      });
+
+      html += '</div>';
+    }
+
+    // ── Section 4: Feature list ──
+    if (card.features && card.features.length > 0) {
+      html += '<div class="mc-section">';
+      html += `<details><summary class="mc-section-title" style="cursor:pointer;border-bottom:none;padding-bottom:0">📋 All Input Features (${card.features.length}) — click to expand</summary>`;
+      html += '<div style="font-size:.72rem;color:var(--muted);margin:.3rem 0 .4rem">The full set of data columns provided to the model during training and inference.</div>';
+      html += '<div class="features-list">';
+      card.features.forEach(f => {
+        html += `<span class="feature-tag">${f}</span>`;
+      });
+      html += '</div></details></div>';
+    }
+
+    // ── Retrain ribbon ──
+    if (card.retrain_info) {
+      const ri = card.retrain_info;
+      html += `<div class="retrain-info-box">
+        <strong>🔄 Last retrained:</strong> ${new Date(ri.timestamp).toLocaleString()}
+        &nbsp;|&nbsp; Source: ${ri.filename || 'unknown'}
+        &nbsp;|&nbsp; ${ri.train_rows} train / ${ri.test_rows} test rows
+        &nbsp;|&nbsp; ${ri.feature_count} features
+      </div>`;
+    }
+
+    html += '</div>'; // close pipeline-card
+  });
+
+  container.innerHTML = html;
+}
+
+// ── Documentation ──────────────────────────────────────────────────────────
+
+let _docsCache = null;
+let _activeDoc = 'overview';
+
+async function loadDocs() {
+  const container = document.getElementById('docs-content');
+  if (_docsCache) {
+    renderDoc(container, _activeDoc);
+    return;
+  }
+  container.innerHTML = '<div class="empty-state"><span class="spinner" style="border-color:var(--primary);border-top-color:var(--primary-light)"></span> Loading documentation\u2026</div>';
+  try {
+    const res = await fetch('/demo/documentation');
+    if (!res.ok) throw new Error(res.statusText);
+    _docsCache = await res.json();
+    renderDoc(container, _activeDoc);
+  } catch (e) {
+    container.innerHTML = '<div class="error-msg">Failed to load documentation: ' + e.message + '</div>';
+  }
+}
+
+function renderDoc(container, key) {
+  const md = _docsCache[key];
+  if (!md) {
+    container.innerHTML = '<div class="empty-state"><p>Documentation not available for this pipeline.</p></div>';
+    return;
+  }
+  container.innerHTML = marked.parse(md);
+}
+
+// doc sub-nav click handlers
+document.querySelectorAll('.doc-nav-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.doc-nav-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    _activeDoc = btn.dataset.doc;
+    const container = document.getElementById('docs-content');
+    if (_docsCache) {
+      renderDoc(container, _activeDoc);
+    } else {
+      loadDocs();
+    }
+  });
+});
+
+// auto-load docs when Documentation tab is clicked
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  if (btn.dataset.tab === 'docs') {
+    btn.addEventListener('click', () => loadDocs());
+  }
+});
+</script>
+</body>
+</html>
