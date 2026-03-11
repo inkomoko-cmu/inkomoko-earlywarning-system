@@ -42,7 +42,7 @@ All authorization decisions are enforced **server-side**.
 
 ```bash
 cd backend
-conda create -n inkomoko-backend python=3.10
+conda create -n inkomoko-backend 
 conda activate inkomoko-backend
 pip install -r requirements.txt
 ````

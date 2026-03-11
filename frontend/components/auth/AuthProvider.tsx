@@ -9,6 +9,7 @@ type AuthCtx = {
   session: UserSession | null;
   isReady: boolean;
   login: (email: string, password: string) => Promise<void>;
+  loginMongo: (email: string, password: string) => Promise<void>;
   logout: () => void;
   setRole: (role: Role) => void;
 };
@@ -36,8 +37,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isReady, setReady] = useState(false);
 
   useEffect(() => {
-    setSessionState(getSession());
+    // Restore session from localStorage on mount
+    const s = getSession();
+    console.log("Session on mount:", s); // Add this debug line
+    setSessionState(s);
     setReady(true);
+
+    // When any apiFetch receives a 401, it dispatches "auth:unauthorized".
+    // We handle it here so we clear BOTH localStorage and React state cleanly,
+    // which causes RequireAuth to redirect via the Next.js router — no hard
+    // page reload and no login/home bounce loop.
+    const handleUnauthorized = () => {
+      clearSession();
+      setSessionState(null);
+    };
+    window.addEventListener("auth:unauthorized", handleUnauthorized);
+    return () => window.removeEventListener("auth:unauthorized", handleUnauthorized);
   }, []);
 
   const login = async (email: string, password: string) => {
@@ -71,6 +86,70 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSessionState(s);
   };
 
+  const loginMongo = async (email: string, password: string) => {
+    const response = await fetch("http://127.0.0.1:8000/mongo/token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        username: email,
+        password: password,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error("Invalid credentials");
+    }
+
+    const tok = await response.json();
+
+    const meResponse = await fetch("http://127.0.0.1:8000/mongo/me", {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${tok.access_token}`,
+      },
+    });
+
+    if (!meResponse.ok) {
+      throw new Error("Failed to fetch user info");
+    }
+
+    const me = await meResponse.json();
+
+    // Handle both single role and multiple roles from MongoDB
+    const rawRoles: string[] = Array.isArray(me.roles)
+      ? me.roles
+      : me.role
+        ? [me.role]
+        : ["Donor"];
+
+    const ROLE_MAP: Record<string, Role> = {
+      admin: "Admin",
+      program_manager: "Program Manager",
+      advisor: "Advisor",
+      donor: "Donor",
+    };
+
+    const mapped = rawRoles.map(
+      (r) => ROLE_MAP[r.toLowerCase()] ?? (r as Role)
+    );
+
+    const primary = pickPrimaryRole(mapped);
+
+    const s: UserSession = {
+      user_id: me.id || email,
+      email: me.email,
+      name: me.username ?? me.email.split("@")[0],
+      role: primary,
+      roles: mapped,
+      access_token: tok.access_token,
+    };
+
+    setSession(s);
+    setSessionState(s);
+  };
+
   const logout = () => {
     clearSession();
     setSessionState(null);
@@ -82,7 +161,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const value = useMemo<AuthCtx>(
-    () => ({ session: sessionState, isReady, login, logout, setRole: setRoleFn }),
+    () => ({ session: sessionState, isReady, login, loginMongo, logout, setRole: setRoleFn }),
     [sessionState, isReady]
   );
 

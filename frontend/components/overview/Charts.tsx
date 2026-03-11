@@ -132,3 +132,222 @@ export function DonorScorecard() {
     </Card>
   );
 }
+
+
+// "use client";
+
+// import { useEffect, useState } from "react";
+// import { Card, CardContent, CardHeader, CardDescription, CardTitle } from "@/components/ui/Card";
+// import { apiFetch } from "@/lib/api";
+// import {
+//   ResponsiveContainer,
+//   PieChart,
+//   Pie,
+//   Cell,
+//   Tooltip as RTooltip,
+//   LineChart,
+//   Line,
+//   XAxis,
+//   YAxis,
+//   CartesianGrid,
+//   BarChart,
+//   Bar,
+//   Legend,
+// } from "recharts";
+
+// const COLORS = {
+//   low: "#16A34A",
+//   med: "#F59E0B",
+//   high: "#DC2626",
+//   blue: "#0B2E5B",
+//   orange: "#F05A28",
+// };
+
+// type RiskTierRow = {
+//   name: string;
+//   value: number;
+// };
+
+// type JobsSummary = {
+//   created: number;
+//   lost: number;
+// };
+
+// export function RiskDistribution() {
+//   const [data, setData] = useState<RiskTierRow[]>([]);
+//   const [loading, setLoading] = useState(true);
+//   const [apiError, setApiError] = useState<string | null>(null);
+
+//   useEffect(() => {
+//     const loadRiskDistribution = async () => {
+//       try {
+//         setLoading(true);
+//         setApiError(null);
+
+//         const res = await apiFetch<RiskTierRow[]>(
+//           "/portfolio/risk-distribution",
+//           { method: "GET" },
+//           true
+//         );
+
+//         setData(res);
+//       } catch (e: any) {
+//         setApiError(e?.message ?? "Failed to load risk distribution.");
+//       } finally {
+//         setLoading(false);
+//       }
+//     };
+
+//     loadRiskDistribution();
+//   }, []);
+
+//   return (
+//     <Card className="h-[340px]">
+//       <CardHeader>
+//         <CardTitle>Risk Tier Distribution</CardTitle>
+//         <CardDescription>Portfolio risk mix based on live backend data.</CardDescription>
+//       </CardHeader>
+//       <CardContent className="h-[260px]">
+//         {loading ? (
+//           <div className="text-sm text-inkomoko-muted">Loading chart...</div>
+//         ) : apiError ? (
+//           <div className="text-sm text-red-600">{apiError}</div>
+//         ) : (
+//           <ResponsiveContainer width="100%" height="100%">
+//             <PieChart>
+//               <Pie data={data} dataKey="value" nameKey="name" innerRadius={60} outerRadius={90} paddingAngle={3}>
+//                 <Cell fill={COLORS.low} />
+//                 <Cell fill={COLORS.med} />
+//                 <Cell fill={COLORS.high} />
+//               </Pie>
+//               <RTooltip />
+//             </PieChart>
+//           </ResponsiveContainer>
+//         )}
+//       </CardContent>
+//     </Card>
+//   );
+// }
+
+// export function RevenueTrend() {
+//   const data = [
+//     { month: "Sep", revenue: 5.8 },
+//     { month: "Oct", revenue: 6.1 },
+//     { month: "Nov", revenue: 6.6 },
+//     { month: "Dec", revenue: 6.9 },
+//     { month: "Jan", revenue: 7.4 },
+//     { month: "Feb", revenue: 7.9 },
+//   ];
+
+//   return (
+//     <Card className="h-[340px]">
+//       <CardHeader>
+//         <CardTitle>Projected Revenue Trend</CardTitle>
+//         <CardDescription>Short-horizon forecast, aggregated across countries (USD millions).</CardDescription>
+//       </CardHeader>
+//       <CardContent className="h-[260px]">
+//         <ResponsiveContainer width="100%" height="100%">
+//           <LineChart data={data}>
+//             <CartesianGrid strokeDasharray="3 3" />
+//             <XAxis dataKey="month" />
+//             <YAxis />
+//             <RTooltip />
+//             <Line type="monotone" dataKey="revenue" stroke={COLORS.orange} strokeWidth={3} dot={false} />
+//           </LineChart>
+//         </ResponsiveContainer>
+//       </CardContent>
+//     </Card>
+//   );
+// }
+
+// export function JobsFlow() {
+//   const [data, setData] = useState<{ name: string; created: number; lost: number }[]>([]);
+//   const [loading, setLoading] = useState(true);
+//   const [apiError, setApiError] = useState<string | null>(null);
+
+//   useEffect(() => {
+//     const loadJobsFlow = async () => {
+//       try {
+//         setLoading(true);
+//         setApiError(null);
+
+//         const res = await apiFetch<JobsSummary>(
+//           "/portfolio/jobs-summary",
+//           { method: "GET" },
+//           true
+//         );
+
+//         setData([
+//           {
+//             name: "3M Jobs Outlook",
+//             created: res.created ?? 0,
+//             lost: res.lost ?? 0,
+//           },
+//         ]);
+//       } catch (e: any) {
+//         setApiError(e?.message ?? "Failed to load jobs summary.");
+//       } finally {
+//         setLoading(false);
+//       }
+//     };
+
+//     loadJobsFlow();
+//   }, []);
+
+//   return (
+//     <Card className="h-[340px]">
+//       <CardHeader>
+//         <CardTitle>Jobs Created vs Jobs Lost</CardTitle>
+//         <CardDescription>Live 3-month jobs outlook from impact data.</CardDescription>
+//       </CardHeader>
+//       <CardContent className="h-[260px]">
+//         {loading ? (
+//           <div className="text-sm text-inkomoko-muted">Loading chart...</div>
+//         ) : apiError ? (
+//           <div className="text-sm text-red-600">{apiError}</div>
+//         ) : (
+//           <ResponsiveContainer width="100%" height="100%">
+//             <BarChart data={data}>
+//               <CartesianGrid strokeDasharray="3 3" />
+//               <XAxis dataKey="name" />
+//               <YAxis />
+//               <RTooltip />
+//               <Legend />
+//               <Bar dataKey="created" fill={COLORS.blue} radius={[8, 8, 0, 0]} />
+//               <Bar dataKey="lost" fill={COLORS.high} radius={[8, 8, 0, 0]} />
+//             </BarChart>
+//           </ResponsiveContainer>
+//         )}
+//       </CardContent>
+//     </Card>
+//   );
+// }
+
+// export function DonorScorecard() {
+//   const data = [
+//     { pillar: "Growth", score: 78 },
+//     { pillar: "Sustainability", score: 72 },
+//     { pillar: "Velocity", score: 81 },
+//     { pillar: "Quality", score: 74 },
+//   ];
+
+//   return (
+//     <Card className="h-[340px]">
+//       <CardHeader>
+//         <CardTitle>Balanced Scorecard</CardTitle>
+//         <CardDescription>Strategic view across the pillars donors monitor.</CardDescription>
+//       </CardHeader>
+//       <CardContent className="h-[260px]">
+//         <ResponsiveContainer width="100%" height="100%">
+//           <BarChart data={data} layout="vertical" margin={{ left: 30 }}>
+//             <CartesianGrid strokeDasharray="3 3" />
+//             <XAxis type="number" domain={[0, 100]} />
+//             <YAxis type="category" dataKey="pillar" />
+//             <RTooltip />
+//             <Bar dataKey="score" fill={COLORS.orange} radius={[8, 8, 8, 8]} />
+//           </BarChart>
+//         </ResponsiveContainer>
+//       </CardContent>
+//     </Card>
+//   );
+// }

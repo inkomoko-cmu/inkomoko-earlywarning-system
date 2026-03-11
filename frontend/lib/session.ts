@@ -2,10 +2,13 @@ import { Role, UserSession } from "./types";
 
 const KEY = "inkomoko.session.v1";
 
+export function setSession(session: UserSession): void {
+  localStorage.setItem(KEY, JSON.stringify(session));
+}
+
 export function getSession(): UserSession | null {
-  if (typeof window === "undefined") return null;
   try {
-    const raw = window.localStorage.getItem(KEY);
+    const raw = localStorage.getItem(KEY);
     if (!raw) return null;
     return JSON.parse(raw) as UserSession;
   } catch {
@@ -13,12 +16,8 @@ export function getSession(): UserSession | null {
   }
 }
 
-export function setSession(session: UserSession) {
-  window.localStorage.setItem(KEY, JSON.stringify(session));
-}
-
 export function clearSession() {
-  window.localStorage.removeItem(KEY);
+  localStorage.removeItem(KEY);
 }
 
 export function updateRole(role: Role) {

@@ -2,6 +2,18 @@ import { clearSession, getSession } from "./session";
 
 const BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
 
+/**
+ * Dispatch this event to trigger a clean logout from anywhere (e.g. on 401).
+ * AuthProvider listens for it and clears both localStorage and React state,
+ * which causes RequireAuth to redirect to /login via the Next.js router —
+ * no hard page reload, no bounce loop.
+ */
+export function dispatchUnauthorized() {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("auth:unauthorized"));
+  }
+}
+
 type ApiError = Error & { status?: number; detail?: string };
 
 function makeError(message: string, status?: number, detail?: string): ApiError {
@@ -14,7 +26,7 @@ function makeError(message: string, status?: number, detail?: string): ApiError 
 export async function apiFetch<T>(
   path: string,
   options: RequestInit = {},
-  withAuth: boolean = false
+  withAuth: boolean = true // Change default to true so all requests send the token
 ): Promise<T> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -50,13 +62,10 @@ export async function apiFetch<T>(
     detail = "";
   }
 
-  // ✅ Auto-logout on 401 when using auth
+  // ✅ Clean logout on 401 — dispatches an event so AuthProvider handles state,
+  // avoiding a hard-reload bounce loop (window.location.href was the old bug).
   if (res.status === 401 && withAuth) {
-    clearSession();
-    // force to login page (works even if called deep in app)
-    if (typeof window !== "undefined") {
-      window.location.href = "/login";
-    }
+    dispatchUnauthorized();
     throw makeError("Session expired. Please sign in again.", 401, detail);
   }
 

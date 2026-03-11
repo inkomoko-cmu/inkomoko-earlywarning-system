@@ -1,0 +1,5 @@
+"user_id","email","full_name","password_hash","is_active","role","created_at"
+"7ef6d732-c23c-4b92-89e9-c869b9104875","advisor@example.com","Advisor User","$2b$12$KkVBcU6BNcOGAMiqV0NoZe2didNAZAxBn6Jq1HRjyD8XJY.8/9pbK",True,"advisor","2026-02-27 13:16:50.394406+02"
+"a764eebe-7b31-4911-b0c1-6e58cec728a4","admin@example.com","Admin User","$2b$12$pCMtyA5fM0F60HGxheS8MOXyvvrdokVxcmzbrA1H001NSciUNpL2a",True,"admin","2026-02-27 13:16:50.394406+02"
+"ca475b58-684a-4c1f-93b7-44c3e549fd51","pm@example.com","Program Manager User","$2b$12$DRjt90.WEihYeAdIEpc98O9wkrxWdonFf7LoPUcM/c8RYo.yfqXte",True,"program_manager","2026-02-27 13:16:50.394406+02"
+"db4add65-4e2d-480e-ad52-522f67f3c481","donor@example.com","Donor User","$2b$12$k4y7nxRsokd3NB2CthdxHO.pPw8PTo3BnKJ8idapPxcrhpnfq9lc.",True,"donor","2026-02-27 13:16:50.394406+02"
