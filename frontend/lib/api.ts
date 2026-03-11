@@ -1,6 +1,6 @@
 import { clearSession, getSession } from "./session";
 
-const BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
+export const BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
 
 /**
  * Dispatch this event to trigger a clean logout from anywhere (e.g. on 401).

@@ -132,7 +132,7 @@ uvicorn app.main:app --reload --port 8000
 Health check:
 
 ```
-GET http://127.0.0.1:8000/health
+GET http://192.198.1.107:8000/health
 ```
 other imports maybe requested:
 - pip install passlib[bcrypt]

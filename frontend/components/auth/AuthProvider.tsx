@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { Role, UserSession } from "@/lib/types";
 import { clearSession, getSession, setSession, updateRole } from "@/lib/session";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, BASE } from "@/lib/api";
 
 type AuthCtx = {
   session: UserSession | null;
@@ -87,7 +87,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const loginMongo = async (email: string, password: string) => {
-    const response = await fetch("http://127.0.0.1:8000/mongo/token", {
+    const response = await fetch(`${BASE}/mongo/token`, {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
@@ -104,7 +104,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const tok = await response.json();
 
-    const meResponse = await fetch("http://127.0.0.1:8000/mongo/me", {
+    const meResponse = await fetch(`${BASE}/mongo/me`, {
       method: "GET",
       headers: {
         Authorization: `Bearer ${tok.access_token}`,

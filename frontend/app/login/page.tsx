@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { ShieldCheck, Sparkles, TrendingUp, CheckCircle2, AlertCircle, Loader2, Eye, EyeOff } from "lucide-react";
 import { ErrorCard } from "@/components/ui/ErrorCard";
+import { BASE } from "@/lib/api";
 
 function homeForRole(role: Role) {
   switch (role) {
@@ -43,7 +44,7 @@ export default function LoginPage() {
     if (isLoggingIn) return; // Skip check during login attempt
     setIsCheckingManually(true);
     try {
-      const response = await fetch("http://127.0.0.1:8000/health/");
+      const response = await fetch(`${BASE}/health/`);
       if (response.ok) {
         const data = await response.json();
         setDbConnected(data.mongo_connected);
@@ -94,15 +95,13 @@ export default function LoginPage() {
             <button
               onClick={checkDbConnection}
               disabled={isCheckingManually || isLoggingIn}
-              className={`hidden sm:inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-300 hover:scale-105 ${
-                isCheckingManually ? "opacity-70" : "opacity-100 hover:opacity-90"
-              } cursor-pointer ${
-                dbConnected === true
+              className={`hidden sm:inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-300 hover:scale-105 ${isCheckingManually ? "opacity-70" : "opacity-100 hover:opacity-90"
+                } cursor-pointer ${dbConnected === true
                   ? "bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100"
                   : dbConnected === false
                     ? "bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100"
                     : "bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100"
-              }`}
+                }`}
               title={
                 dbConnected === true
                   ? "MongoDB connected. Click to refresh."
