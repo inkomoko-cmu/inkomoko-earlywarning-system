@@ -36,6 +36,7 @@ function allowedPrefixes(role: Role): string[] {
         "/audit",
         "/data-quality",
         "/settings",
+        "/docs",
       ];
     case "Program Manager":
       return [...base, "/portfolio", "/scenarios", "/models", "/reports", "/settings"];

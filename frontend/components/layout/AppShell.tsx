@@ -9,7 +9,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen flex">
-      <Sidebar />
+      <div className="sticky top-0 h-screen flex-shrink-0 overflow-y-auto">
+        <Sidebar />
+      </div>
 
       <div className="flex-1 min-w-0">
         <Topbar />

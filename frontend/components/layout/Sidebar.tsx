@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/ui";
 import {
   BarChart3,
+  BookOpen,
   BrainCircuit,
   FileText,
   Gauge,
@@ -32,6 +33,7 @@ const ALL_NAV: NavItem[] = [
   { href: "/data-quality", label: "Data Quality", icon: ShieldCheck },
   { href: "/audit", label: "Audit Log", icon: ScrollText },
   { href: "/reports", label: "Reports", icon: FileText },
+  { href: "/docs", label: "Documentation", icon: BookOpen },
   { href: "/settings", label: "Settings", icon: Wrench },
 ];
 

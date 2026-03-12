@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { COUNTRIES } from "@/lib/data";
-import { Card, CardContent, CardHeader, CardDescription, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
 import { exportCSV, exportExcel, exportPDF } from "@/lib/export";
-import { Filter, Download, Search } from "lucide-react";
+import {
+  Filter, Download, Search, CreditCard, DollarSign,
+  Wallet, Clock, AlertCircle, Globe, Briefcase,
+} from "lucide-react";
 import { RequireRole } from "@/components/auth/RequireRole";
 import { apiFetch } from "@/lib/api";
 
@@ -46,41 +47,34 @@ export default function PortfolioPage() {
   const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const loadPortfolio = async () => {
-      try {
-        setLoading(true);
-        setApiError(null);
+  const loadPortfolio = async () => {
+    try {
+      setLoading(true);
+      setApiError(null);
+      const [summaryRes, byCountryRes, loansRes] = await Promise.all([
+        apiFetch<PortfolioSummary>("/portfolio/summary", { method: "GET" }, true),
+        apiFetch<PortfolioByCountry[]>("/portfolio/by-country", { method: "GET" }, true),
+        apiFetch<PortfolioLoan[]>("/portfolio/loans", { method: "GET" }, true),
+      ]);
+      setSummary(summaryRes);
+      setByCountry(byCountryRes);
+      setLoans(loansRes);
+    } catch (e: any) {
+      setApiError(e?.message ?? "Failed to load portfolio data.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-        const [summaryRes, byCountryRes, loansRes] = await Promise.all([
-          apiFetch<PortfolioSummary>("/portfolio/summary", { method: "GET" }, true),
-          apiFetch<PortfolioByCountry[]>("/portfolio/by-country", { method: "GET" }, true),
-          apiFetch<PortfolioLoan[]>("/portfolio/loans", { method: "GET" }, true),
-        ]);
-
-        setSummary(summaryRes);
-        setByCountry(byCountryRes);
-        setLoans(loansRes);
-      } catch (e: any) {
-        setApiError(e?.message ?? "Failed to load portfolio data.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadPortfolio();
-  }, []);
+  useEffect(() => { loadPortfolio(); }, []);
 
   const rows = useMemo(() => {
     return loans.filter((loan) => {
       if (country !== "All" && loan.country_code !== country) return false;
-
       if (q.trim()) {
-        const s =
-          `${loan.loannumber} ${loan.country_code} ${loan.industrysectorofactivity ?? ""} ${loan.loanstatus ?? ""}`.toLowerCase();
+        const s = `${loan.loannumber} ${loan.country_code} ${loan.industrysectorofactivity ?? ""} ${loan.loanstatus ?? ""}`.toLowerCase();
         if (!s.includes(q.toLowerCase())) return false;
       }
-
       return true;
     });
   }, [loans, country, q]);
@@ -97,165 +91,220 @@ export default function PortfolioPage() {
       InstallmentsInArrears: loan.installmentinarrears ?? 0,
     }));
 
+  const loanStatusColor = (status: string | null) => {
+    const s = (status ?? "").toLowerCase();
+    if (s.includes("active")) return "success";
+    if (s.includes("arrear") || s.includes("default")) return "danger";
+    if (s.includes("closed") || s.includes("written")) return "neutral";
+    return "blue";
+  };
+
   return (
     <RequireRole allow={["Admin", "Program Manager", "Advisor"]}>
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-semibold text-inkomoko-blue">Portfolio</h1>
-          <p className="text-sm text-inkomoko-muted mt-1">
-            Portfolio metrics and loan rows now come from the database-backed API.
-          </p>
+      <div className="space-y-8">
+
+        {/* ── Hero banner ────────────────────────────────────────── */}
+        <div className="rounded-2xl bg-gradient-to-br from-inkomoko-blue via-inkomoko-blueSoft to-inkomoko-blue text-white p-8 relative overflow-hidden">
+          <div className="pointer-events-none absolute -top-20 -right-20 h-64 w-64 rounded-full bg-white/5" />
+          <div className="pointer-events-none absolute bottom-0 right-40 h-40 w-40 rounded-full bg-white/5" />
+          <div className="pointer-events-none absolute -bottom-8 -left-8 h-32 w-32 rounded-full bg-white/5" />
+
+          <div className="relative z-10 flex flex-col xl:flex-row xl:items-start gap-6">
+            <div className="flex-1">
+              <p className="text-xs font-bold uppercase tracking-widest text-blue-300 mb-2">
+                Inkomoko Early Warning System
+              </p>
+              <h1 className="text-3xl font-bold mb-2 tracking-tight">Loan Portfolio</h1>
+              <p className="text-blue-100 text-sm max-w-xl leading-relaxed">
+                Live portfolio metrics and loan records from PostgreSQL — filter, explore, and export for stakeholder reporting.
+              </p>
+              <div className="mt-5 flex flex-wrap gap-2">
+                {[
+                  { icon: <CreditCard size={12} />, label: "Live loan data" },
+                  { icon: <Globe size={12} />, label: "Multi-country view" },
+                  { icon: <AlertCircle size={12} />, label: "Arrears tracking" },
+                ].map(({ icon, label }) => (
+                  <span
+                    key={label}
+                    className="flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-medium text-white backdrop-blur-sm"
+                  >
+                    {icon} {label}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* Export buttons */}
+            <div className="flex flex-col gap-2 xl:items-end">
+              <p className="text-xs text-blue-300">Export loan table</p>
+              <div className="flex flex-wrap gap-2 xl:justify-end">
+                {([
+                  { label: "PDF",   fn: () => exportPDF("Portfolio", "Portfolio — Loan Portfolio Table", exportRows()) },
+                  { label: "Excel", fn: () => exportExcel("Portfolio", exportRows(), "Portfolio") },
+                  { label: "CSV",   fn: () => exportCSV("Portfolio", exportRows()) },
+                ] as { label: string; fn: () => void }[]).map(({ label, fn }) => (
+                  <button
+                    key={label}
+                    onClick={fn}
+                    disabled={loading || rows.length === 0}
+                    className="rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-white/20 disabled:opacity-40"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
 
+        {/* ── Error ──────────────────────────────────────────────── */}
         {apiError && (
-          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {apiError}
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-center justify-between gap-3">
+            <span>{apiError}</span>
+            <div className="flex gap-2">
+              <button onClick={() => setApiError(null)} className="text-xs underline">Dismiss</button>
+              <button onClick={loadPortfolio} className="text-xs underline">Retry</button>
+            </div>
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
-          <MetricCard
-            label="Total Loans"
-            value={loading ? "Loading..." : summary?.total_loans?.toLocaleString() ?? "—"}
-          />
-          <MetricCard
-            label="Total Disbursed"
-            value={loading ? "Loading..." : formatMoney(summary?.total_disbursed)}
-          />
-          <MetricCard
-            label="Outstanding Balance"
-            value={loading ? "Loading..." : formatMoney(summary?.total_outstanding)}
-          />
-          <MetricCard
-            label="Avg Days in Arrears"
-            value={loading ? "Loading..." : summary?.avg_days_in_arrears?.toFixed(2) ?? "—"}
-          />
-          <MetricCard
-            label="PAR30 Amount"
-            value={loading ? "Loading..." : formatMoney(summary?.par30_amount)}
-          />
+        {/* ── Summary stats ──────────────────────────────────────── */}
+        <div>
+          <SectionLabel title="Portfolio Summary" accent="bg-inkomoko-blue" />
+          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
+            <StatCard label="Total Loans"          value={summary?.total_loans.toLocaleString()}           icon={<CreditCard size={16} />}  color="blue"  loading={loading} />
+            <StatCard label="Total Disbursed"       value={formatMoney(summary?.total_disbursed)}           icon={<DollarSign size={16} />}  color="green" loading={loading} />
+            <StatCard label="Outstanding Balance"   value={formatMoney(summary?.total_outstanding)}        icon={<Wallet size={16} />}      color="amber" loading={loading} />
+            <StatCard label="Avg Days in Arrears"   value={summary?.avg_days_in_arrears.toFixed(2)}        icon={<Clock size={16} />}       color="amber" loading={loading} />
+            <StatCard label="PAR30 Amount"          value={formatMoney(summary?.par30_amount)}             icon={<AlertCircle size={16} />} color="red"   loading={loading} />
+          </div>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Portfolio by Country</CardTitle>
-            <CardDescription>Live data loaded from PostgreSQL through FastAPI.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-auto rounded-2xl border border-inkomoko-border bg-white">
-              <table className="min-w-[700px] w-full text-sm">
-                <thead className="bg-inkomoko-bg">
-                  <tr className="text-left">
-                    <Th>Country</Th>
-                    <Th>Loans</Th>
-                    <Th>Total Disbursed</Th>
-                    <Th>Total Outstanding</Th>
+        {/* ── By country ─────────────────────────────────────────── */}
+        <div>
+          <SectionLabel title="Performance by Country" accent="bg-emerald-500" />
+          <div className="rounded-2xl border border-inkomoko-border bg-white overflow-hidden shadow-card">
+            <table className="min-w-[580px] w-full text-sm">
+              <thead>
+                <tr className="border-b border-inkomoko-border bg-inkomoko-bg">
+                  <Th><Globe size={13} className="inline mr-1.5 opacity-60" />Country</Th>
+                  <Th>Loans</Th>
+                  <Th>Total Disbursed</Th>
+                  <Th>Total Outstanding</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  [1, 2, 3].map((i) => (
+                    <tr key={i} className="border-t border-inkomoko-border">
+                      {[1,2,3,4].map((j) => (
+                        <td key={j} className="px-4 py-3">
+                          <div className="h-4 w-full animate-pulse rounded bg-inkomoko-bg" />
+                        </td>
+                      ))}
+                    </tr>
+                  ))
+                ) : byCountry.length === 0 ? (
+                  <tr className="border-t border-inkomoko-border">
+                    <Td colSpan={4} className="text-center text-inkomoko-muted">No country data found.</Td>
                   </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    <tr className="border-t border-inkomoko-border">
-                      <Td colSpan={4}>Loading...</Td>
+                ) : (
+                  byCountry.map((row) => (
+                    <tr key={row.country_code} className="border-t border-inkomoko-border hover:bg-inkomoko-bg/60 transition-colors">
+                      <Td><span className="font-semibold text-inkomoko-blue">{row.country_code}</span></Td>
+                      <Td>{row.loans.toLocaleString()}</Td>
+                      <Td>{formatMoney(row.total_disbursed)}</Td>
+                      <Td>{formatMoney(row.total_outstanding)}</Td>
                     </tr>
-                  ) : byCountry.length === 0 ? (
-                    <tr className="border-t border-inkomoko-border">
-                      <Td colSpan={4}>No data found.</Td>
-                    </tr>
-                  ) : (
-                    byCountry.map((row) => (
-                      <tr key={row.country_code} className="border-t border-inkomoko-border hover:bg-inkomoko-bg/60">
-                        <Td>{row.country_code}</Td>
-                        <Td>{row.loans.toLocaleString()}</Td>
-                        <Td>{formatMoney(row.total_disbursed)}</Td>
-                        <Td>{formatMoney(row.total_outstanding)}</Td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
 
-        <Card>
-          <CardHeader className="flex-col md:flex-row md:items-end md:justify-between gap-4">
-            <div>
-              <CardTitle>Loan Portfolio Table</CardTitle>
-              <CardDescription>
-                Live loan rows loaded from PostgreSQL through the backend API.
-              </CardDescription>
-            </div>
+        {/* ── Loan table ─────────────────────────────────────────── */}
+        <div>
+          <SectionLabel title="Loan Portfolio" accent="bg-inkomoko-blue" />
 
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant="secondary"
-                className="gap-2"
-                onClick={() => exportPDF("Portfolio", "Portfolio — Loan Portfolio Table", exportRows())}
-              >
-                <Download size={16} /> PDF
-              </Button>
-              <Button variant="secondary" onClick={() => exportExcel("Portfolio", exportRows(), "Portfolio")}>
-                Excel
-              </Button>
-              <Button variant="secondary" onClick={() => exportCSV("Portfolio", exportRows())}>
-                CSV
-              </Button>
-              <Badge tone="blue" className="gap-1">
-                <Filter size={14} /> {rows.length} loans
-              </Badge>
+          {/* Filters bar */}
+          <div className="mb-3 flex flex-col md:flex-row gap-3 items-stretch">
+            <div className="flex items-center gap-2 rounded-xl border border-inkomoko-border bg-white px-3 py-2.5 flex-1 max-w-sm">
+              <Search size={15} className="text-inkomoko-muted flex-shrink-0" />
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                className="w-full text-sm outline-none bg-transparent"
+                placeholder="Loan number, sector, status…"
+              />
             </div>
-          </CardHeader>
+            <select
+              value={country}
+              onChange={(e) => setCountry(e.target.value)}
+              className="rounded-xl border border-inkomoko-border bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-inkomoko-blue/20"
+            >
+              {["All", ...COUNTRIES].map((o) => (
+                <option key={o} value={o}>{o === "All" ? "All Countries" : o}</option>
+              ))}
+            </select>
+            <span className="flex items-center gap-1.5 rounded-xl border border-inkomoko-border bg-white px-3 py-2.5 text-xs font-medium text-inkomoko-muted">
+              <Filter size={13} /> {rows.length} loans
+            </span>
+          </div>
 
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <Select label="Country" value={country} onChange={setCountry} options={["All", ...COUNTRIES]} />
-              <label className="block">
-                <div className="text-sm font-medium">Search</div>
-                <div className="mt-2 flex items-center gap-2 rounded-xl border border-inkomoko-border bg-white px-3 py-2">
-                  <Search size={16} className="text-inkomoko-muted" />
-                  <input
-                    value={q}
-                    onChange={(e) => setQ(e.target.value)}
-                    className="w-full text-sm outline-none"
-                    placeholder="Loan number, sector, status..."
-                  />
-                </div>
-              </label>
-            </div>
-
-            <div className="overflow-auto rounded-2xl border border-inkomoko-border bg-white">
+          <div className="rounded-2xl border border-inkomoko-border bg-white overflow-hidden shadow-card">
+            <div className="overflow-x-auto">
               <table className="min-w-[1100px] w-full text-sm">
-                <thead className="bg-inkomoko-bg">
-                  <tr className="text-left">
-                    <Th>Loan Number</Th>
+                <thead>
+                  <tr className="border-b border-inkomoko-border bg-inkomoko-bg">
+                    <Th><Briefcase size={13} className="inline mr-1.5 opacity-60" />Loan Number</Th>
                     <Th>Country</Th>
                     <Th>Sector</Th>
                     <Th>Status</Th>
                     <Th>Disbursed</Th>
                     <Th>Current Balance</Th>
                     <Th>Days in Arrears</Th>
-                    <Th>Installments in Arrears</Th>
+                    <Th>Installments Overdue</Th>
                   </tr>
                 </thead>
                 <tbody>
                   {loading ? (
-                    <tr className="border-t border-inkomoko-border">
-                      <Td colSpan={8}>Loading...</Td>
-                    </tr>
+                    [1,2,3,4,5].map((i) => (
+                      <tr key={i} className="border-t border-inkomoko-border">
+                        {[1,2,3,4,5,6,7,8].map((j) => (
+                          <td key={j} className="px-4 py-3">
+                            <div className="h-4 w-full animate-pulse rounded bg-inkomoko-bg" />
+                          </td>
+                        ))}
+                      </tr>
+                    ))
                   ) : rows.length === 0 ? (
                     <tr className="border-t border-inkomoko-border">
-                      <Td colSpan={8}>No loans found.</Td>
+                      <Td colSpan={8} className="text-center text-inkomoko-muted py-10">No loans match the current filters.</Td>
                     </tr>
                   ) : (
                     rows.map((loan) => (
-                      <tr key={`${loan.loannumber}-${loan.country_code}-${loan.disbursedamount}`} className="border-t border-inkomoko-border hover:bg-inkomoko-bg/60">
-                        <Td>{loan.loannumber}</Td>
+                      <tr
+                        key={`${loan.loannumber}-${loan.country_code}-${loan.disbursedamount}`}
+                        className="border-t border-inkomoko-border hover:bg-inkomoko-bg/60 transition-colors"
+                      >
+                        <Td><span className="font-mono font-medium text-inkomoko-blue">{loan.loannumber}</span></Td>
                         <Td>{loan.country_code}</Td>
                         <Td>{loan.industrysectorofactivity ?? "—"}</Td>
-                        <Td>{loan.loanstatus ?? "—"}</Td>
+                        <Td>
+                          {loan.loanstatus ? (
+                            <Badge tone={loanStatusColor(loan.loanstatus) as "success" | "danger" | "neutral" | "blue"}>
+                              {loan.loanstatus}
+                            </Badge>
+                          ) : "—"}
+                        </Td>
                         <Td>{formatMoney(loan.disbursedamount)}</Td>
                         <Td>{formatMoney(loan.currentbalance)}</Td>
-                        <Td>{loan.daysinarrears ?? 0}</Td>
+                        <Td>
+                          <span className={`font-medium ${(loan.daysinarrears ?? 0) > 30 ? "text-red-600" : (loan.daysinarrears ?? 0) > 0 ? "text-amber-600" : "text-inkomoko-text"}`}>
+                            {loan.daysinarrears ?? 0}
+                          </span>
+                        </Td>
                         <Td>{loan.installmentinarrears ?? 0}</Td>
                       </tr>
                     ))
@@ -263,83 +312,68 @@ export default function PortfolioPage() {
                 </tbody>
               </table>
             </div>
-
-            <div className="text-xs text-inkomoko-muted">
-              Live loan portfolio rows loaded from the database. Next step: add backend filtering and pagination.
+            <div className="border-t border-inkomoko-border bg-inkomoko-bg/50 px-4 py-2 text-xs text-inkomoko-muted">
+              Showing {rows.length} of {loans.length} loans · Live data from PostgreSQL via FastAPI
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
+
       </div>
     </RequireRole>
   );
 }
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
 function formatMoney(value?: number | null) {
-  if (value === null || value === undefined) return "—";
+  if (value == null) return "—";
   return `$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function MetricCard({ label, value }: { label: string; value: string }) {
+function SectionLabel({ title, accent }: { title: string; accent: string }) {
   return (
-    <Card>
-      <CardContent className="p-4">
-        <div className="text-xs uppercase tracking-wide text-inkomoko-muted">{label}</div>
-        <div className="mt-2 text-xl font-semibold text-inkomoko-text">{value}</div>
-      </CardContent>
-    </Card>
+    <div className="flex items-center gap-2 mb-4">
+      <div className={`h-4 w-1 rounded-full ${accent}`} />
+      <h2 className="text-xs font-bold uppercase tracking-widest text-inkomoko-muted">{title}</h2>
+    </div>
   );
 }
 
-function Th({ children }: { children: React.ReactNode }) {
-  return <th className="px-4 py-3 text-xs font-semibold text-inkomoko-muted uppercase tracking-wide">{children}</th>;
+type StatColor = "blue" | "green" | "red" | "amber";
+
+function StatCard({ label, value, icon, color, loading }: {
+  label: string; value: string | undefined; icon: ReactNode; color: StatColor; loading?: boolean;
+}) {
+  const iconStyle: Record<StatColor, string> = {
+    blue:  "bg-blue-50 text-inkomoko-blue",
+    green: "bg-emerald-50 text-emerald-700",
+    red:   "bg-red-50 text-red-600",
+    amber: "bg-amber-50 text-amber-600",
+  };
+  return (
+    <div className="rounded-2xl border border-inkomoko-border bg-white p-4 transition-shadow hover:shadow-card">
+      <div className={`mb-3 w-fit rounded-lg p-2 ${iconStyle[color]}`}>{icon}</div>
+      {loading ? (
+        <div className="mb-1 h-6 w-2/3 animate-pulse rounded bg-inkomoko-bg" />
+      ) : (
+        <div className="text-xl font-bold text-inkomoko-text">{value ?? "—"}</div>
+      )}
+      <div className="mt-1 text-xs uppercase tracking-wide text-inkomoko-muted">{label}</div>
+    </div>
+  );
 }
 
-function Td({
-  children,
-  className = "",
-  colSpan,
-}: {
-  children: React.ReactNode;
-  className?: string;
-  colSpan?: number;
-}) {
+function Th({ children }: { children: ReactNode }) {
+  return (
+    <th className="px-4 py-3 text-left text-xs font-semibold text-inkomoko-muted uppercase tracking-wide whitespace-nowrap">
+      {children}
+    </th>
+  );
+}
+
+function Td({ children, className = "", colSpan }: { children: ReactNode; className?: string; colSpan?: number }) {
   return (
     <td colSpan={colSpan} className={`px-4 py-3 ${className}`}>
       {children}
     </td>
   );
 }
-
-function Select({
-  label,
-  value,
-  onChange,
-  options,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  options: string[];
-}) {
-  return (
-    <label className="block">
-      <div className="text-sm font-medium">{label}</div>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="mt-2 w-full rounded-xl border border-inkomoko-border bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-inkomoko-orange/25"
-      >
-        {options.map((o) => (
-          <option key={o} value={o}>
-            {o}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
-
-// Debug code - run in browser console on the portfolio page if needed
-// const session = JSON.parse(localStorage.getItem("session") ?? "{}");
-// console.log("Token:", session?.access_token);
-// console.log("Role:", session?.role);
