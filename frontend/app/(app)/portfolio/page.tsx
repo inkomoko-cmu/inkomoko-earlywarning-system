@@ -339,7 +339,7 @@ function Select({
   );
 }
 
-// Run in browser console on the portfolio page
-const session = JSON.parse(localStorage.getItem("session") ?? "{}");
-console.log("Token:", session?.access_token);
-console.log("Role:", session?.role);
+// Debug code - run in browser console on the portfolio page if needed
+// const session = JSON.parse(localStorage.getItem("session") ?? "{}");
+// console.log("Token:", session?.access_token);
+// console.log("Role:", session?.role);

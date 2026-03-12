@@ -779,13 +779,15 @@ def _evaluate_contracts(df: pd.DataFrame) -> Dict:
         # Track missing required columns
         if contract.get("required") and not present:
             missing_required.append(col)
-            violations.append({
-                "column": col,
-                "rule": "required_column",
-                "severity": "critical",
-                "message": f"Required column '{col}' is missing from dataset",
-                "affected_rows": total_rows,
-            })
+            violations.append(
+                {
+                    "column": col,
+                    "rule": "required_column",
+                    "severity": "critical",
+                    "message": f"Required column '{col}' is missing from dataset",
+                    "affected_rows": total_rows,
+                }
+            )
             overall_total += 1
             continue
 
@@ -818,13 +820,15 @@ def _evaluate_contracts(df: pd.DataFrame) -> Dict:
             if profile["fill_rate"] >= 90:
                 checks_ok += 1
             else:
-                violations.append({
-                    "column": col,
-                    "rule": "completeness",
-                    "severity": "warning",
-                    "message": f"'{col}' fill rate {profile['fill_rate']}% is below 90% threshold",
-                    "affected_rows": profile["null_count"],
-                })
+                violations.append(
+                    {
+                        "column": col,
+                        "rule": "completeness",
+                        "severity": "warning",
+                        "message": f"'{col}' fill rate {profile['fill_rate']}% is below 90% threshold",
+                        "affected_rows": profile["null_count"],
+                    }
+                )
 
         # 2. Uniqueness check
         if contract.get("unique"):
@@ -834,13 +838,15 @@ def _evaluate_contracts(df: pd.DataFrame) -> Dict:
             if dup_count == 0:
                 checks_ok += 1
             else:
-                violations.append({
-                    "column": col,
-                    "rule": "uniqueness",
-                    "severity": "error",
-                    "message": f"'{col}' has {dup_count} duplicate values",
-                    "affected_rows": dup_count,
-                })
+                violations.append(
+                    {
+                        "column": col,
+                        "rule": "uniqueness",
+                        "severity": "error",
+                        "message": f"'{col}' has {dup_count} duplicate values",
+                        "affected_rows": dup_count,
+                    }
+                )
 
         # 3. Range checks (numeric)
         if contract["type"] == "numeric" and series.notna().sum() > 0:
@@ -857,13 +863,15 @@ def _evaluate_contracts(df: pd.DataFrame) -> Dict:
                     if below == 0:
                         checks_ok += 1
                     else:
-                        violations.append({
-                            "column": col,
-                            "rule": "range_min",
-                            "severity": "warning",
-                            "message": f"'{col}' has {below} values below minimum {contract['min']}",
-                            "affected_rows": below,
-                        })
+                        violations.append(
+                            {
+                                "column": col,
+                                "rule": "range_min",
+                                "severity": "warning",
+                                "message": f"'{col}' has {below} values below minimum {contract['min']}",
+                                "affected_rows": below,
+                            }
+                        )
 
                 if "max" in contract:
                     checks_n += 1
@@ -871,13 +879,15 @@ def _evaluate_contracts(df: pd.DataFrame) -> Dict:
                     if above == 0:
                         checks_ok += 1
                     else:
-                        violations.append({
-                            "column": col,
-                            "rule": "range_max",
-                            "severity": "warning",
-                            "message": f"'{col}' has {above} values above maximum {contract['max']}",
-                            "affected_rows": above,
-                        })
+                        violations.append(
+                            {
+                                "column": col,
+                                "rule": "range_max",
+                                "severity": "warning",
+                                "message": f"'{col}' has {above} values above maximum {contract['max']}",
+                                "affected_rows": above,
+                            }
+                        )
 
                 # Outlier check (>3σ from mean)
                 if numeric_s.std() > 0:
@@ -889,13 +899,15 @@ def _evaluate_contracts(df: pd.DataFrame) -> Dict:
                     if outliers <= max(1, int(total_rows * 0.05)):
                         checks_ok += 1
                     else:
-                        violations.append({
-                            "column": col,
-                            "rule": "outlier",
-                            "severity": "info",
-                            "message": f"'{col}' has {outliers} statistical outliers (>3σ)",
-                            "affected_rows": outliers,
-                        })
+                        violations.append(
+                            {
+                                "column": col,
+                                "rule": "outlier",
+                                "severity": "info",
+                                "message": f"'{col}' has {outliers} statistical outliers (>3σ)",
+                                "affected_rows": outliers,
+                            }
+                        )
 
         # 4. Allowed-values check (categorical)
         if contract["type"] == "categorical" and "allowed" in contract:
@@ -906,13 +918,15 @@ def _evaluate_contracts(df: pd.DataFrame) -> Dict:
                 checks_ok += 1
             else:
                 inv_count = int(series.isin(invalid).sum())
-                violations.append({
-                    "column": col,
-                    "rule": "allowed_values",
-                    "severity": "warning",
-                    "message": f"'{col}' has {len(invalid)} unexpected value(s): {', '.join(str(v) for v in sorted(invalid)[:5])}",
-                    "affected_rows": inv_count,
-                })
+                violations.append(
+                    {
+                        "column": col,
+                        "rule": "allowed_values",
+                        "severity": "warning",
+                        "message": f"'{col}' has {len(invalid)} unexpected value(s): {', '.join(str(v) for v in sorted(invalid)[:5])}",
+                        "affected_rows": inv_count,
+                    }
+                )
 
         # 5. Type consistency check
         if contract["type"] == "numeric":
@@ -924,13 +938,15 @@ def _evaluate_contracts(df: pd.DataFrame) -> Dict:
                 if non_numeric == 0:
                     checks_ok += 1
                 else:
-                    violations.append({
-                        "column": col,
-                        "rule": "type_check",
-                        "severity": "error",
-                        "message": f"'{col}' has {non_numeric} non-numeric values in a numeric column",
-                        "affected_rows": non_numeric,
-                    })
+                    violations.append(
+                        {
+                            "column": col,
+                            "rule": "type_check",
+                            "severity": "error",
+                            "message": f"'{col}' has {non_numeric} non-numeric values in a numeric column",
+                            "affected_rows": non_numeric,
+                        }
+                    )
             else:
                 checks_ok += 1  # all null — no type violations
 
@@ -986,18 +1002,22 @@ async def get_data_quality():
         if not test_csv.exists():
             # Fallback to acceptance_test.csv
             test_csv = ML_DIR / "synthetic_outputs" / "acceptance_test.csv"
-        
+
         if not test_csv.exists():
             # Final fallback to any CSV in synthetic_outputs
             synthetic_dir = ML_DIR / "synthetic_outputs"
             if synthetic_dir.exists():
                 csv_files = list(synthetic_dir.glob("*.csv"))
                 # Filter out Zone.Identifier files
-                csv_files = [f for f in csv_files if not f.name.endswith("Zone.Identifier")]
+                csv_files = [
+                    f for f in csv_files if not f.name.endswith("Zone.Identifier")
+                ]
                 if csv_files:
                     test_csv = csv_files[0]
                 else:
-                    raise FileNotFoundError("No CSV files found in synthetic_outputs directory")
+                    raise FileNotFoundError(
+                        "No CSV files found in synthetic_outputs directory"
+                    )
             else:
                 raise FileNotFoundError("Synthetic outputs directory not found")
 
@@ -1010,22 +1030,29 @@ async def get_data_quality():
     except FileNotFoundError as e:
         logger.warning(f"Test data not found: {e}")
         # Return empty result with message
-        return JSONResponse(content={
-            "total_rows": 0,
-            "total_columns": 0,
-            "contracted_columns": len(_DATA_CONTRACTS),
-            "present_contracted": 0,
-            "missing_required": [],
-            "quality_score": 0,
-            "checks_passed": 0,
-            "checks_total": 0,
-            "violations": [],
-            "violation_severity": {"critical": 0, "error": 0, "warning": 0, "info": 0},
-            "column_profiles": [],
-            "completeness_summary": [],
-            "source": "No test data available",
-            "error": str(e)
-        })
+        return JSONResponse(
+            content={
+                "total_rows": 0,
+                "total_columns": 0,
+                "contracted_columns": len(_DATA_CONTRACTS),
+                "present_contracted": 0,
+                "missing_required": [],
+                "quality_score": 0,
+                "checks_passed": 0,
+                "checks_total": 0,
+                "violations": [],
+                "violation_severity": {
+                    "critical": 0,
+                    "error": 0,
+                    "warning": 0,
+                    "info": 0,
+                },
+                "column_profiles": [],
+                "completeness_summary": [],
+                "source": "No test data available",
+                "error": str(e),
+            }
+        )
     except Exception as e:
         logger.error(f"Data quality check failed: {e}", exc_info=True)
         raise HTTPException(

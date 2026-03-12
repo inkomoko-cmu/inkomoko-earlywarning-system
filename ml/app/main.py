@@ -11,7 +11,7 @@ from fastapi.responses import HTMLResponse
 
 from app.config import get_settings
 from app.models import load_models
-from app.routers import demo, employment, health, revenue, risk
+from app.routers import demo, employment, health, revenue, risk, train
 
 _TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
 
@@ -48,6 +48,7 @@ app.include_router(risk.router)
 app.include_router(employment.router)
 app.include_router(revenue.router)
 app.include_router(demo.router)
+app.include_router(train.router)
 
 
 # ── Landing page ────────────────────────────────────────────────────────────

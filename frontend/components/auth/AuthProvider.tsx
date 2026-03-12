@@ -9,7 +9,6 @@ type AuthCtx = {
   session: UserSession | null;
   isReady: boolean;
   login: (email: string, password: string) => Promise<void>;
-  loginMongo: (email: string, password: string) => Promise<void>;
   logout: () => void;
   setRole: (role: Role) => void;
 };
@@ -42,6 +41,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     console.log("Session on mount:", s); // Add this debug line
     setSessionState(s);
     setReady(true);
+
+    // Check ML model status on startup
+    const checkModelStatus = async () => {
+      try {
+        const response = await fetch(`${BASE}/ml/status`);
+        if (response.ok) {
+          const status = await response.json();
+          if (!status.models_exist) {
+            console.warn(
+              `⚠️ ML models not ready: ${status.model_count}/${status.expected_count} models found.`,
+              `Missing: ${status.missing_models.join(", ")}`
+            );
+            
+            // If user is Admin, they can trigger training
+            if (s?.role === "Admin") {
+              console.info(
+                "💡 Admin detected: You can train models via POST /ml/train or through the UI"
+              );
+            }
+          } else {
+            console.info("✅ ML models ready:", status.model_count, "models loaded");
+          }
+        }
+      } catch (error) {
+        console.warn("Could not check ML model status:", error);
+      }
+    };
+
+    // Run model check after a short delay to avoid blocking auth
+    setTimeout(checkModelStatus, 1000);
 
     // When any apiFetch receives a 401, it dispatches "auth:unauthorized".
     // We handle it here so we clear BOTH localStorage and React state cleanly,
@@ -86,70 +115,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSessionState(s);
   };
 
-  const loginMongo = async (email: string, password: string) => {
-    const response = await fetch(`${BASE}/mongo/token`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({
-        username: email,
-        password: password,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error("Invalid credentials");
-    }
-
-    const tok = await response.json();
-
-    const meResponse = await fetch(`${BASE}/mongo/me`, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${tok.access_token}`,
-      },
-    });
-
-    if (!meResponse.ok) {
-      throw new Error("Failed to fetch user info");
-    }
-
-    const me = await meResponse.json();
-
-    // Handle both single role and multiple roles from MongoDB
-    const rawRoles: string[] = Array.isArray(me.roles)
-      ? me.roles
-      : me.role
-        ? [me.role]
-        : ["Donor"];
-
-    const ROLE_MAP: Record<string, Role> = {
-      admin: "Admin",
-      program_manager: "Program Manager",
-      advisor: "Advisor",
-      donor: "Donor",
-    };
-
-    const mapped = rawRoles.map(
-      (r) => ROLE_MAP[r.toLowerCase()] ?? (r as Role)
-    );
-
-    const primary = pickPrimaryRole(mapped);
-
-    const s: UserSession = {
-      user_id: me.id || email,
-      email: me.email,
-      name: me.username ?? me.email.split("@")[0],
-      role: primary,
-      roles: mapped,
-      access_token: tok.access_token,
-    };
-
-    setSession(s);
-    setSessionState(s);
-  };
-
   const logout = () => {
     clearSession();
     setSessionState(null);
@@ -161,7 +126,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const value = useMemo<AuthCtx>(
-    () => ({ session: sessionState, isReady, login, loginMongo, logout, setRole: setRoleFn }),
+    () => ({ session: sessionState, isReady, login, logout, setRole: setRoleFn }),
     [sessionState, isReady]
   );
 

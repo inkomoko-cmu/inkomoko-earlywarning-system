@@ -1,15 +1,14 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
 import type { Role } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
-import { ShieldCheck, Sparkles, TrendingUp, CheckCircle2, AlertCircle, Loader2, Eye, EyeOff } from "lucide-react";
+import { ShieldCheck, Sparkles, TrendingUp, Eye, EyeOff } from "lucide-react";
 import { ErrorCard } from "@/components/ui/ErrorCard";
-import { BASE } from "@/lib/api";
 
 function homeForRole(role: Role) {
   switch (role) {
@@ -27,48 +26,14 @@ function homeForRole(role: Role) {
 }
 
 export default function LoginPage() {
-  const { login, loginMongo, session, isReady } = useAuth();
+  const { login, session, isReady } = useAuth();
   const router = useRouter();
 
-  const [email, setEmail] = useState("admin@example.com");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState("admin@admin.com");
+  const [password, setPassword] = useState("admin");
   const [error, setError] = useState<string | null>(null);
-  const [dbConnected, setDbConnected] = useState<boolean | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const [isCheckingManually, setIsCheckingManually] = useState(false);
-  const [useMongoDb, setUseMongoDb] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-
-  // Memoized check function so it can be called from both useEffect and button
-  const checkDbConnection = useCallback(async () => {
-    if (isLoggingIn) return; // Skip check during login attempt
-    setIsCheckingManually(true);
-    try {
-      const response = await fetch(`${BASE}/health/`);
-      if (response.ok) {
-        const data = await response.json();
-        setDbConnected(data.mongo_connected);
-      } else {
-        setDbConnected(false);
-      }
-    } catch (err) {
-      console.error("Health check failed:", err);
-      setDbConnected(false);
-    } finally {
-      setIsCheckingManually(false);
-    }
-  }, [isLoggingIn]);
-
-  // Set up 15-second polling interval
-  useEffect(() => {
-    // Check immediately on mount
-    checkDbConnection();
-
-    // Set up interval to check every 15 seconds
-    const interval = setInterval(checkDbConnection, 15000);
-
-    return () => clearInterval(interval);
-  }, [checkDbConnection]);
 
   // ✅ Redirect if already logged in (or right after successful login)
   useEffect(() => {
@@ -92,46 +57,6 @@ export default function LoginPage() {
             <Badge tone="orange" className="ml-auto hidden sm:inline-flex">
               <Sparkles size={14} /> Intelligence Suite
             </Badge>
-            <button
-              onClick={checkDbConnection}
-              disabled={isCheckingManually || isLoggingIn}
-              className={`hidden sm:inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-300 hover:scale-105 ${isCheckingManually ? "opacity-70" : "opacity-100 hover:opacity-90"
-                } cursor-pointer ${dbConnected === true
-                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100"
-                  : dbConnected === false
-                    ? "bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100"
-                    : "bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100"
-                }`}
-              title={
-                dbConnected === true
-                  ? "MongoDB connected. Click to refresh."
-                  : dbConnected === false
-                    ? "MongoDB unavailable. Click to retry."
-                    : "Checking database status... Click to refresh."
-              }
-            >
-              {isCheckingManually ? (
-                <>
-                  <Loader2 size={14} className="text-amber-500 animate-spin" />
-                  <span>Checking</span>
-                </>
-              ) : dbConnected === true ? (
-                <>
-                  <CheckCircle2 size={14} className="text-emerald-600" />
-                  <span>Ready</span>
-                </>
-              ) : dbConnected === false ? (
-                <>
-                  <AlertCircle size={14} className="text-amber-600" />
-                  <span>Offline</span>
-                </>
-              ) : (
-                <>
-                  <Loader2 size={14} className="text-gray-500 animate-spin" />
-                  <span>Checking</span>
-                </>
-              )}
-            </button>
           </div>
 
           <h1 className="mt-10 text-3xl font-semibold tracking-tight text-inkomoko-blue">
@@ -142,32 +67,15 @@ export default function LoginPage() {
             and advisory insights.
           </p>
 
-          {/* MongoDB Toggle */}
-          <div className="mt-6 flex items-center gap-3 p-3 rounded-lg bg-gray-50 border border-gray-200">
-            <label className="flex items-center gap-2 cursor-pointer flex-1">
-              <input
-                type="checkbox"
-                checked={useMongoDb}
-                onChange={(e) => setUseMongoDb(e.target.checked)}
-                className="rounded border-inkomoko-border"
-              />
-              <span className="text-sm font-medium text-inkomoko-text">
-                {useMongoDb ? "MongoDB Login" : "Standard Login"}
-              </span>
-            </label>
-          </div>
-
           <div className="mt-8 space-y-4">
             <label className="block">
-              <div className="text-sm font-medium text-inkomoko-text">
-                {useMongoDb ? "Username" : "Email"}
-              </div>
+              <div className="text-sm font-medium text-inkomoko-text">Email</div>
               <input
                 className="mt-2 w-full rounded-xl border border-inkomoko-border px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-inkomoko-orange/25"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                type={useMongoDb ? "text" : "email"}
-                placeholder={useMongoDb ? "Enter username" : "name@organization.org"}
+                type="email"
+                placeholder="name@organization.org"
                 autoComplete="username"
               />
             </label>
@@ -214,11 +122,7 @@ export default function LoginPage() {
                   try {
                     setError(null);
                     setIsLoggingIn(true);
-                    if (useMongoDb) {
-                      await loginMongo(email, password);
-                    } else {
-                      await login(email, password);
-                    }
+                    await login(email, password);
                   } catch (e: any) {
                     setError(e?.message ?? "Login failed");
                   } finally {
@@ -233,23 +137,27 @@ export default function LoginPage() {
               size="lg"
               disabled={isLoggingIn}
               onClick={async () => {
-                if (useMongoDb) {
-                  await loginMongo(email, password);
-                } else {
-                  try {
-                    setError(null);
-                    setIsLoggingIn(true);
-                    await login(email, password);
-                  } catch (e: any) {
-                    setError(e?.message ?? "Login failed");
-                  } finally {
-                    setIsLoggingIn(false);
-                  }
+                try {
+                  setError(null);
+                  setIsLoggingIn(true);
+                  await login(email, password);
+                } catch (e: any) {
+                  setError(e?.message ?? "Login failed");
+                } finally {
+                  setIsLoggingIn(false);
                 }
               }}
             >
               {isLoggingIn ? "Signing in..." : "Sign in"}
             </Button>
+
+            {/* Debug Mode Notice */}
+            <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-3">
+              <div className="text-xs font-semibold text-blue-800">🔧 Debug Mode Active</div>
+              <div className="text-xs text-blue-600 mt-1">
+                Use <span className="font-mono font-semibold">admin@admin.com</span> / <span className="font-mono font-semibold">admin</span> for quick access
+              </div>
+            </div>
 
             <div className="mt-4 rounded-2xl border border-inkomoko-border bg-inkomoko-bg p-4">
               <div className="flex items-start gap-3">
