@@ -1,0 +1,16 @@
+nohup: ignoring input
+
+> inkomoko-early-warning@2.0.0 dev
+> next dev
+
+  ▲ Next.js 14.2.5
+  - Local:        http://localhost:3000
+
+ ✓ Starting...
+
+> inkomoko-early-warning@2.0.0 dev
+> next dev --experimental-https
+
+ ⚠ Self-signed certificates are currently an experimental feature, use with caution.
+   Downloading mkcert package...
+   Download response was successful, writing to disk
