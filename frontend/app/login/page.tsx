@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
 import type { Role } from "@/lib/types";
@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { ShieldCheck, Sparkles, TrendingUp, Eye, EyeOff } from "lucide-react";
 import { ErrorCard } from "@/components/ui/ErrorCard";
+import { BASE } from "@/lib/api";
 
 function homeForRole(role: Role) {
   switch (role) {
@@ -34,12 +35,62 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [backendStatus, setBackendStatus] = useState<"checking" | "online" | "offline">("checking");
+  const [dbStatus, setDbStatus] = useState<"checking" | "online" | "offline" | "debug">("checking");
 
   // ✅ Redirect if already logged in (or right after successful login)
   useEffect(() => {
     if (!isReady) return;
     if (session) router.replace(homeForRole(session.role));
   }, [session, isReady, router]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const checkHealth = async () => {
+      try {
+        const res = await fetch(`${BASE}/health`, { method: "GET" });
+        if (!res.ok) throw new Error("Backend offline");
+        const data = await res.json();
+        if (!isMounted) return;
+        setBackendStatus("online");
+        if (data?.debug_mode) {
+          setDbStatus("debug");
+        } else {
+          setDbStatus(data?.postgres_connected ? "online" : "offline");
+        }
+      } catch {
+        if (!isMounted) return;
+        setBackendStatus("offline");
+        setDbStatus("offline");
+      }
+    };
+
+    checkHealth();
+    const timer = setInterval(checkHealth, 20000);
+    return () => {
+      isMounted = false;
+      clearInterval(timer);
+    };
+  }, []);
+
+  const backendLabel = useMemo(() => {
+    if (backendStatus === "checking") return "Backend: Checking";
+    return backendStatus === "online" ? "Backend: Online" : "Backend: Offline";
+  }, [backendStatus]);
+
+  const dbLabel = useMemo(() => {
+    if (dbStatus === "checking") return "Database: Checking";
+    if (dbStatus === "debug") return "Database: Debug";
+    return dbStatus === "online" ? "Database: Online" : "Database: Offline";
+  }, [dbStatus]);
+
+  const statusDot = (status: "checking" | "online" | "offline" | "debug") => {
+    if (status === "online") return "bg-inkomoko-success";
+    if (status === "offline") return "bg-inkomoko-danger";
+    if (status === "debug") return "bg-inkomoko-warning";
+    return "bg-inkomoko-border";
+  };
 
   return (
     <div className="min-h-screen grid grid-cols-1 lg:grid-cols-2">
@@ -54,9 +105,19 @@ export default function LoginPage() {
               className="h-8 w-auto"
               priority
             />
-            <Badge tone="orange" className="ml-auto hidden sm:inline-flex">
-              <Sparkles size={14} /> Intelligence Suite
-            </Badge>
+            <div className="ml-auto hidden sm:flex items-center gap-2">
+              <Badge tone="orange" className="inline-flex">
+                <Sparkles size={14} /> Intelligence Suite
+              </Badge>
+              <div className="flex items-center gap-1.5 rounded-full border border-inkomoko-border bg-inkomoko-bg px-2 py-0.5">
+                <span className={`h-1.5 w-1.5 rounded-full ${statusDot(backendStatus)}`} />
+                <span className="text-[10px] text-inkomoko-muted">{backendLabel}</span>
+              </div>
+              <div className="flex items-center gap-1.5 rounded-full border border-inkomoko-border bg-inkomoko-bg px-2 py-0.5">
+                <span className={`h-1.5 w-1.5 rounded-full ${statusDot(dbStatus)}`} />
+                <span className="text-[10px] text-inkomoko-muted">{dbLabel}</span>
+              </div>
+            </div>
           </div>
 
           <h1 className="mt-10 text-3xl font-semibold tracking-tight text-inkomoko-blue">
