@@ -35,6 +35,7 @@ share/python-wheels/
 venv/
 ENV/
 env/
+.venv
 
 # Conda
 .conda/
@@ -42,6 +43,8 @@ conda-meta/
 # (optional) if someone accidentally commits env export files:
 *.conda.yml
 environment.yml
+environment.lock
+environment.frozen.yml
 
 # Pytest / coverage / reports
 .pytest_cache/
@@ -65,35 +68,74 @@ dmypy.json
 
 # Jupyter
 .ipynb_checkpoints/
+*.ipynb_checkpoints/
+.jupyter_cache/
+
+# ML / Data Science artifacts
+ml/artifacts/
+ml/charts/
+ml/synthetic_outputs/
+*.joblib
+*.pkl
+*.pickle
+*.h5
+*.pth
+*.onnx
 
 # Logs
 *.log
 logs/
 uvicorn.log
+unicorn.log
 
 # OS junk
 .DS_Store
 Thumbs.db
+*:Zone.Identifier
 
 # IDEs/editors
 .vscode/
 .idea/
 *.iml
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+*~
 
-# -----------------------------
 # Secrets / local config
-# -----------------------------
 .env
+.env.local
+.env.*.local
 .env.*
 !.env.example
+!.env.test
 
-# Local DB / dumps (if any)
+# Local DB / dumps
 *.sqlite
+*.sqlite3
 *.db
 *.dump
 *.sql.gz
+data/
+db_backups/
 
-# -----------------------------
 # Cache folders
-# -----------------------------
 .cache/
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+.ipython/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak
+*.swp
+
+# Test coverage
+.coverage/
+.coverage.*
+htmlcov/
+coverage.xml

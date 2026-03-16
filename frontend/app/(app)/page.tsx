@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useState, type ReactNode } from "react";
 import { KpiGrid } from "@/components/overview/KpiGrid";
 import { DonorScorecard, JobsFlow, RevenueTrend, RiskDistribution } from "@/components/overview/Charts";
@@ -9,7 +10,7 @@ import {
   Sparkles, TrendingUp, AlertTriangle, ShieldCheck,
   CreditCard, Wallet, Clock, UserCheck, UserMinus, BarChart3,
   ThumbsUp, ThumbsDown, AlertCircle, DollarSign,
-  Users, PieChart,
+  Users, PieChart, RefreshCw,
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { ErrorCard } from "@/components/ui/ErrorCard";
@@ -23,8 +24,8 @@ type OverviewData = {
   jobs_created_3m: number;
   jobs_lost_3m: number;
   avg_revenue_3m: number;
-  nps_promoter: number;
-  nps_detractor: number;
+  nps_promoter_pct: number;
+  nps_detractor_pct: number;
 };
 
 export default function OverviewPage() {
@@ -62,8 +63,8 @@ export default function OverviewPage() {
       { Metric: "Jobs Created (3M)", Value: overview.jobs_created_3m },
       { Metric: "Jobs Lost (3M)", Value: overview.jobs_lost_3m },
       { Metric: "Average Revenue (3M)", Value: overview.avg_revenue_3m },
-      { Metric: "NPS Promoters", Value: overview.nps_promoter },
-      { Metric: "NPS Detractors", Value: overview.nps_detractor },
+      { Metric: "NPS Promoters", Value: overview.nps_promoter_pct },
+      { Metric: "NPS Detractors", Value: overview.nps_detractor_pct },
     ];
     exportPDF("Impact_Overview", "Impact & Early Warning — Overview Summary", rows);
   };
@@ -75,12 +76,12 @@ export default function OverviewPage() {
       { KPI: "Total Disbursed", Value: formatMoney(overview.total_disbursed) },
       { KPI: "Total Outstanding", Value: formatMoney(overview.total_outstanding) },
       { KPI: "PAR30 Amount", Value: formatMoney(overview.par30_amount) },
-      { KPI: "Avg Days in Arrears", Value: overview.avg_days_in_arrears.toFixed(2) },
+      { KPI: "Avg Days in Arrears", Value: overview.avg_days_in_arrears?.toFixed(2) ?? "—" },
       { KPI: "Jobs Created (3M)", Value: overview.jobs_created_3m },
       { KPI: "Jobs Lost (3M)", Value: overview.jobs_lost_3m },
       { KPI: "Avg Revenue (3M)", Value: formatMoney(overview.avg_revenue_3m) },
-      { KPI: "NPS Promoters", Value: overview.nps_promoter },
-      { KPI: "NPS Detractors", Value: overview.nps_detractor },
+      { KPI: "NPS Promoters", Value: overview.nps_promoter_pct },
+      { KPI: "NPS Detractors", Value: overview.nps_detractor_pct },
     ];
     if (format === "csv") exportCSV("KPI_Snapshot", rows);
     if (format === "xlsx") exportExcel("KPI_Snapshot", rows, "KPIs");
@@ -146,13 +147,23 @@ export default function OverviewPage() {
                 </button>
               ))}
             </div>
-            <button
-              onClick={exportImpactOverview}
-              disabled={!overview}
-              className="rounded-lg bg-white px-5 py-2 text-sm font-semibold text-inkomoko-blue shadow-sm transition-colors hover:bg-blue-50 disabled:opacity-40"
-            >
-              Export Overview PDF
-            </button>
+            <div className="flex flex-wrap gap-2 xl:justify-end">
+              <button
+                onClick={loadOverview}
+                disabled={loading}
+                className="rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-white/20 disabled:opacity-40 flex items-center gap-1"
+              >
+                <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+                Refresh
+              </button>
+              <button
+                onClick={exportImpactOverview}
+                disabled={!overview}
+                className="rounded-lg bg-white px-5 py-2 text-sm font-semibold text-inkomoko-blue shadow-sm transition-colors hover:bg-blue-50 disabled:opacity-40"
+              >
+                Export Overview PDF
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -172,11 +183,11 @@ export default function OverviewPage() {
       <div>
         <SectionLabel title="Portfolio Health" accent="bg-inkomoko-blue" />
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
-          <StatCard label="Total Loans"          value={overview?.total_loans.toLocaleString()} icon={<CreditCard size={16} />}   color="blue"  loading={loading} />
+          <StatCard label="Total Loans"          value={overview?.total_loans?.toLocaleString() ?? "—"} icon={<CreditCard size={16} />}   color="blue"  loading={loading} />
           <StatCard label="Total Disbursed"      value={formatMoney(overview?.total_disbursed)} icon={<DollarSign size={16} />}    color="green" loading={loading} />
           <StatCard label="Total Outstanding"    value={formatMoney(overview?.total_outstanding)} icon={<Wallet size={16} />}      color="amber" loading={loading} />
           <StatCard label="PAR30 Amount"         value={formatMoney(overview?.par30_amount)}    icon={<AlertCircle size={16} />}   color="red"   loading={loading} />
-          <StatCard label="Avg Days in Arrears"  value={overview?.avg_days_in_arrears.toFixed(2)} icon={<Clock size={16} />}      color="amber" loading={loading} />
+          <StatCard label="Avg Days in Arrears"  value={overview?.avg_days_in_arrears?.toFixed(2) ?? "—"} icon={<Clock size={16} />}      color="amber" loading={loading} />
         </div>
       </div>
 
@@ -184,11 +195,11 @@ export default function OverviewPage() {
       <div>
         <SectionLabel title="Impact Metrics" accent="bg-emerald-500" />
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
-          <StatCard label="Jobs Created (3M)"   value={overview?.jobs_created_3m.toLocaleString()} icon={<UserCheck size={16} />}  color="green" loading={loading} />
-          <StatCard label="Jobs Lost (3M)"      value={overview?.jobs_lost_3m.toLocaleString()}    icon={<UserMinus size={16} />}  color="red"   loading={loading} />
+          <StatCard label="Jobs Created (3M)"   value={overview?.jobs_created_3m?.toLocaleString() ?? "—"} icon={<UserCheck size={16} />}  color="green" loading={loading} />
+          <StatCard label="Jobs Lost (3M)"      value={overview?.jobs_lost_3m?.toLocaleString() ?? "—"}    icon={<UserMinus size={16} />}  color="red"   loading={loading} />
           <StatCard label="Avg Revenue (3M)"    value={formatMoney(overview?.avg_revenue_3m)}      icon={<BarChart3 size={16} />}  color="blue"  loading={loading} />
-          <StatCard label="NPS Promoters"       value={overview?.nps_promoter.toLocaleString()}    icon={<ThumbsUp size={16} />}   color="green" loading={loading} />
-          <StatCard label="NPS Detractors"      value={overview?.nps_detractor.toLocaleString()}   icon={<ThumbsDown size={16} />} color="red"   loading={loading} />
+          <StatCard label="NPS Promoters"       value={overview?.nps_promoter_pct?.toLocaleString() ?? "—"}    icon={<ThumbsUp size={16} />}   color="green" loading={loading} />
+          <StatCard label="NPS Detractors"      value={overview?.nps_detractor_pct?.toLocaleString() ?? "—"}   icon={<ThumbsDown size={16} />} color="red"   loading={loading} />
         </div>
       </div>
 

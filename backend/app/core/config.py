@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     DATABASE_URL: str = (
-        "postgresql+asyncpg://postgres:password@localhost:5432/inkomoko_early_warning"
+        "postgresql+asyncpg://inkomoko_app:StrongPass2026@localhost:5432/inkomoko_early_warning"
     )
     JWT_SECRET: str = "dev_secret_change_in_production"
     JWT_ALG: str = "HS256"

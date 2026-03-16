@@ -12,7 +12,6 @@ import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { exportPDF } from "@/lib/export";
 import { apiFetch } from "@/lib/api";
-import { AUDIT_LOG } from "@/lib/data";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 type Source = "governance" | "backend" | "ml";
@@ -38,24 +37,6 @@ interface AuditResponse {
   severity_counts: Record<string, number>;
   source_counts: Record<string, number>;
   ml_available: boolean;
-}
-
-// ── Static governance events from data.ts ─────────────────────────────────
-function transformGovernanceEvents(): AuditEntry[] {
-  return AUDIT_LOG.map((a, i) => ({
-    id: `gov-${i}`,
-    timestamp: `2026-02-07T${a.time.split(" ")[1]}:00Z`,
-    source: "governance" as Source,
-    action: a.action,
-    category: a.action.toLowerCase().includes("export") ? "advisory"
-      : a.action.toLowerCase().includes("access") ? "system"
-      : a.action.toLowerCase().includes("advisory") ? "advisory"
-      : "data",
-    severity: a.outcome === "Denied" ? "warning" : "info",
-    actor: `${a.actor} (${a.role})`,
-    details: `Resource: ${a.resource} — Outcome: ${a.outcome}`,
-    meta: { role: a.role, resource: a.resource, outcome: a.outcome },
-  }));
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────
@@ -139,15 +120,13 @@ export default function AuditPage() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
 
-  const govEvents = useMemo(() => transformGovernanceEvents(), []);
-
   const fetchLive = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const data = await apiFetch<AuditResponse>("/audit/logs?limit=1000");
-      setLiveEvents(data.events ?? []);
-      setMlAvailable(data.ml_available ?? false);
+      setLiveEvents(data?.events ?? []);
+      setMlAvailable(data?.ml_available ?? false);
       setLastRefresh(new Date());
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load");
@@ -160,10 +139,10 @@ export default function AuditPage() {
 
   // Merge all sources
   const allEvents = useMemo<AuditEntry[]>(() => {
-    const combined = [...govEvents, ...liveEvents];
+    const combined = [...liveEvents];
     // Sort newest-first
     return combined.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-  }, [govEvents, liveEvents]);
+  }, [liveEvents]);
 
   // Apply filters
   const filtered = useMemo(() => {
@@ -187,6 +166,7 @@ export default function AuditPage() {
   const totalWarnings = allEvents.filter(e => ["warning", "error", "critical"].includes(e.severity)).length;
   const backendCount = liveEvents.filter(e => e.source === "backend").length;
   const mlCount = liveEvents.filter(e => e.source === "ml").length;
+  const governanceCount = liveEvents.filter(e => e.source === "governance").length;
 
   // Reset page on filter change
   useEffect(() => { setPage(0); }, [sourceFilter, categoryFilter, severityFilter, search]);
@@ -237,7 +217,7 @@ export default function AuditPage() {
         {/* ── KPI Cards ── */}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           <KpiCard value={allEvents.length} label="Total Events" />
-          <KpiCard value={govEvents.length}  label="Governance"  sub="Frontend" />
+          <KpiCard value={governanceCount}  label="Governance"  sub="DB" />
           <KpiCard value={backendCount}       label="Backend API" sub="Live"     />
           <KpiCard
             value={mlAvailable ? mlCount : "—"}
@@ -276,7 +256,7 @@ export default function AuditPage() {
                 <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none
                   ${active ? "bg-white/20 text-white" : "bg-inkomoko-bg text-inkomoko-muted"}`}>
                   {src === "all" ? allEvents.length
-                    : src === "governance" ? govEvents.length
+                    : src === "governance" ? governanceCount
                     : src === "backend" ? backendCount
                     : mlCount}
                 </span>

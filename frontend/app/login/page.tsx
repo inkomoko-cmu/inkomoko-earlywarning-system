@@ -12,18 +12,8 @@ import { ErrorCard } from "@/components/ui/ErrorCard";
 import { BASE } from "@/lib/api";
 
 function homeForRole(role: Role) {
-  switch (role) {
-    case "Admin":
-      return "/audit";
-    case "Program Manager":
-      return "/portfolio";
-    case "Advisor":
-      return "/advisory";
-    case "Donor":
-      return "/reports";
-    default:
-      return "/portfolio";
-  }
+  // All roles start with the overview page
+  return "/";
 }
 
 export default function LoginPage() {
@@ -258,7 +248,7 @@ export default function LoginPage() {
 
       <div className="relative hidden lg:block">
         <Image
-          src="/brand/hero.png"
+          src="/brand/impact-entrepreneurs.png"
           alt="Inkomoko field context"
           fill
           className="object-cover"

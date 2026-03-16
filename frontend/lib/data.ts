@@ -1,4 +1,4 @@
-import { AuditEvent, Country, DataQualityContract, EnterpriseRow, ModelCard, PortfolioKPI, Scenario } from "./types";
+import { Country, DataQualityContract, EnterpriseRow, ModelCard, PortfolioKPI, Scenario } from "./types";
 import { v4 as uuid } from "uuid";
 
 export const COUNTRIES: Country[] = ["Rwanda", "Kenya", "Uganda", "DRC"];
@@ -153,10 +153,3 @@ export const DQ_CONTRACTS: DataQualityContract[] = [
   },
 ];
 
-export const AUDIT_LOG: AuditEvent[] = [
-  { time: "2026-02-07 09:12", actor: "A. N.", role: "Program Manager", action: "Export KPI Report (PDF)", resource: "Impact Overview", outcome: "Success" },
-  { time: "2026-02-07 09:06", actor: "S. W.", role: "Admin", action: "Update Access Policy", resource: "RBAC Masking Rules", outcome: "Success" },
-  { time: "2026-02-07 08:55", actor: "V. U.", role: "Advisor", action: "Generate Advisory Plan", resource: "Enterprise 8f2…", outcome: "Success" },
-  { time: "2026-02-07 08:41", actor: "D. R.", role: "Donor", action: "View Donor Lens", resource: "Resilience Scorecard", outcome: "Success" },
-  { time: "2026-02-07 08:22", actor: "M. M.", role: "Admin", action: "Attempt Restricted Export", resource: "Enterprise-level Identifiers", outcome: "Denied" },
-];

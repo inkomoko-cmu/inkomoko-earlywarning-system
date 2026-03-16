@@ -1,7 +1,57 @@
-# ML generated outputs
+# ====================================
+# Node / Frontend
+# ====================================
+node_modules/
+.next/
+dist/
+build/
+package-lock.json
+
+# ====================================
+# Python / Backend
+# ====================================
+__pycache__/
+*.py[cod]
+*.pyc
+.venv/
+venv/
+
+# ====================================
+# ML / Data Science
+# ====================================
 ml/artifacts/
 ml/charts/
+ml/synthetic_outputs/
 *.joblib
+*.pkl
+*.pickle
 
-# OS metadata files
+# ====================================
+# IDE / Editor
+# ====================================
+.vscode/
+.idea/
+
+# ====================================
+# Environment & Secrets
+# ====================================
+.env
+.env.local
+.env.*
+!.env.example
+
+# ====================================
+# OS Metadata
+# ====================================
+.DS_Store
+Thumbs.db
 *:Zone.Identifier
+
+# ====================================
+# Logs & Temporary Files
+# ====================================
+*.log
+logs/
+tmp/
+temp/
+

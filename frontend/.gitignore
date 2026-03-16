@@ -13,36 +13,53 @@ out/
 
 # Production build
 dist/
+build/
+out/
 
-# -----------------------------
 # Environment variables
-# -----------------------------
 .env
 .env.local
 .env.development
+.env.development.local
+.env.test
+.env.test.local
 .env.production
+.env.production.local
 .env.*
 !.env.example
 
-# -----------------------------
 # OS files
-# -----------------------------
 .DS_Store
+.AppleDouble
+.LSOverride
 Thumbs.db
+*:Zone.Identifier
 
-# -----------------------------
 # IDE / Editor
-# -----------------------------
 .vscode/
 .idea/
 *.iml
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+*~
+.ionide/
 
-# -----------------------------
 # TypeScript
-# -----------------------------
 *.tsbuildinfo
+*.d.ts.map
 
-# -----------------------------
-# Cache
-# -----------------------------
+# Build cache / Turbo
 .cache/
+.turbo/
+.next/cache/
+.turbopack/
+.parcel-cache/
+.eslintcache
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak

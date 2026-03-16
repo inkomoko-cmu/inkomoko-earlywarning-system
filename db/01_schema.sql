@@ -380,10 +380,15 @@ CREATE INDEX IF NOT EXISTS idx_scope_user ON auth_scope(user_id);
   user_id UUID REFERENCES auth_user(user_id) ON DELETE SET NULL,
 
   action TEXT NOT NULL,                 -- e.g. "VIEW_DASHBOARD", "EXPORT_DATA", "RUN_INFERENCE", "RUN_SCENARIO", "RAG_QUERY"
+  category TEXT NOT NULL DEFAULT 'system',
+  severity TEXT NOT NULL DEFAULT 'info',
+  actor TEXT,
+  details TEXT,
   resource_type TEXT,                   -- "enterprise", "cohort", "model", "scenario", "rag"
   resource_id UUID,
 
   request_context JSONB NOT NULL DEFAULT '{}'::jsonb,  -- ip, user-agent, endpoint, filters
+  meta JSONB NOT NULL DEFAULT '{}'::jsonb,
   success BOOLEAN NOT NULL DEFAULT TRUE,
   error_message TEXT,
 

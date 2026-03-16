@@ -11,6 +11,7 @@ class HealthResponse(BaseModel):
     debug_mode: bool
 
 
+@router.get("", response_model=HealthResponse)
 @router.get("/", response_model=HealthResponse)
 async def health_check():
     """Check system health."""
