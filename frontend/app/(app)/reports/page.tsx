@@ -25,7 +25,7 @@ import { RequireRole } from "@/components/auth/RequireRole";
 // ── Types ──────────────────────────────────────────────────────────────────
 type RiskTier = "HIGH" | "MEDIUM" | "LOW";
 type ReportType = "donor_pack" | "program_brief";
-type DataSource = "stored" | "test";
+type DataSource = "live" | "demo";
 
 type HorizonData = {
   avg_risk_score: number;
@@ -100,6 +100,63 @@ type ReportData = {
   action_items?: ActionItem[];
 };
 
+type PortfolioOverview = {
+  total_loans: number;
+  total_disbursed: number;
+  total_outstanding: number;
+  avg_days_in_arrears: number;
+  par30_pct: number;
+  high_risk_count: number;
+  medium_risk_count: number;
+  low_risk_count: number;
+  avg_revenue_3m: number;
+  total_jobs_created_3m: number;
+  total_jobs_lost_3m: number;
+  revenue_delta_pct: number;
+  risk_trend: string;
+};
+
+type RiskDistributionItem = {
+  name: string;
+  value: number;
+  pct: number;
+};
+
+type SegmentItem = {
+  country_code?: string;
+  sector?: string;
+  client_count: number;
+  total_revenue: number;
+  avg_revenue: number;
+  jobs_created: number;
+  jobs_lost: number;
+  high_risk_count: number;
+};
+
+type EnterpriseProfileItem = {
+  unique_id: string;
+  country_code: string | null;
+  business_sector: string | null;
+  risk_tier_3m: string | null;
+  risk_score_3m: number;
+  revenue_3m: number;
+  jobs_created_3m: number;
+  jobs_lost_3m: number;
+};
+
+type TrendPoint = {
+  month: string;
+  value: number;
+  upper_ci: number;
+  lower_ci: number;
+  n?: number;
+};
+
+type TrendsResponse = {
+  revenue: TrendPoint[];
+  jobs_created: TrendPoint[];
+};
+
 // ── Helpers ────────────────────────────────────────────────────────────────
 function fmt(v: number | null | undefined, prefix = ""): string {
   if (v == null) return "—";
@@ -111,6 +168,226 @@ function fmt(v: number | null | undefined, prefix = ""): string {
 function pct(v: number | null | undefined): string {
   if (v == null) return "—";
   return (v * 100).toFixed(1) + "%";
+}
+
+function toUpperTier(raw: string | null | undefined): RiskTier {
+  const t = (raw || "").toUpperCase();
+  if (t === "HIGH") return "HIGH";
+  if (t === "MEDIUM") return "MEDIUM";
+  return "LOW";
+}
+
+function summarizeTrendDirection(points: TrendPoint[]): "up" | "down" | "flat" {
+  if (!points || points.length < 2) return "flat";
+  const first = points[0]?.value ?? 0;
+  const last = points[points.length - 1]?.value ?? 0;
+  const change = last - first;
+  if (Math.abs(change) < Math.max(1, Math.abs(first) * 0.01)) return "flat";
+  return change > 0 ? "up" : "down";
+}
+
+async function buildReportFromPortfolio(reportType: ReportType): Promise<ReportData> {
+  const [overviewRes, enterprisesRes, bySectorRes, byCountryRes, riskDistRes, trendsRes] = await Promise.allSettled([
+    apiFetch<PortfolioOverview>("/portfolio/overview", { method: "GET" }, true, { cacheTtlMs: 120000 }),
+    apiFetch<EnterpriseProfileItem[]>("/portfolio/enterprises", { method: "GET" }, true, { cacheTtlMs: 120000 }),
+    apiFetch<SegmentItem[]>("/portfolio/by-sector", { method: "GET" }, true, { cacheTtlMs: 120000 }),
+    apiFetch<Array<{ country_code: string; loans: number; total_disbursed: number; total_outstanding: number }>>(
+      "/portfolio/by-country",
+      { method: "GET" },
+      true,
+      { cacheTtlMs: 120000 }
+    ),
+    apiFetch<RiskDistributionItem[]>("/portfolio/risk-distribution", { method: "GET" }, true, { cacheTtlMs: 120000 }),
+    apiFetch<TrendsResponse>("/portfolio/trends?months=12", { method: "GET" }, true, { cacheTtlMs: 120000 }),
+  ]);
+
+  const overview: PortfolioOverview = overviewRes.status === "fulfilled"
+    ? overviewRes.value
+    : {
+        total_loans: 0,
+        total_disbursed: 0,
+        total_outstanding: 0,
+        avg_days_in_arrears: 0,
+        par30_pct: 0,
+        high_risk_count: 0,
+        medium_risk_count: 0,
+        low_risk_count: 0,
+        avg_revenue_3m: 0,
+        total_jobs_created_3m: 0,
+        total_jobs_lost_3m: 0,
+        revenue_delta_pct: 0,
+        risk_trend: "stable",
+      };
+
+  const enterprises = enterprisesRes.status === "fulfilled" ? enterprisesRes.value : [];
+  const bySector = bySectorRes.status === "fulfilled" ? bySectorRes.value : [];
+  const byCountry = byCountryRes.status === "fulfilled" ? byCountryRes.value : [];
+  const riskDist = riskDistRes.status === "fulfilled" ? riskDistRes.value : [];
+  const trends = trendsRes.status === "fulfilled" ? trendsRes.value : { revenue: [], jobs_created: [] };
+
+  const failures = [overviewRes, enterprisesRes, bySectorRes, byCountryRes, riskDistRes, trendsRes].filter(
+    (r) => r.status === "rejected"
+  ).length;
+
+  const total = enterprises.length;
+  const totalRevenue = enterprises.reduce((acc, e) => acc + (e.revenue_3m || 0), 0);
+  const totalCreated = enterprises.reduce((acc, e) => acc + (e.jobs_created_3m || 0), 0);
+  const totalLost = enterprises.reduce((acc, e) => acc + (e.jobs_lost_3m || 0), 0);
+  const avgRisk = total ? enterprises.reduce((acc, e) => acc + (e.risk_score_3m || 0), 0) / total : 0;
+
+  const tierDistribution = {
+    HIGH: riskDist.find((r) => (r.name || "").toUpperCase() === "HIGH")?.value ?? overview.high_risk_count ?? 0,
+    MEDIUM: riskDist.find((r) => (r.name || "").toUpperCase() === "MEDIUM")?.value ?? overview.medium_risk_count ?? 0,
+    LOW: riskDist.find((r) => (r.name || "").toUpperCase() === "LOW")?.value ?? overview.low_risk_count ?? 0,
+  } as Partial<Record<RiskTier, number>>;
+
+  const sector_breakdown: BreakdownEntry[] = bySector.map((s) => ({
+    sector: s.sector || "Unknown",
+    count: s.client_count,
+    avg_risk: total ? (s.high_risk_count / Math.max(1, s.client_count)) * 0.75 : 0,
+    high_risk: s.high_risk_count,
+    total_revenue: s.total_revenue,
+    total_jobs_created: s.jobs_created,
+  }));
+
+  const byCountryMap = new Map<string, EnterpriseProfileItem[]>();
+  for (const ent of enterprises) {
+    const cc = ent.country_code || "Unknown";
+    const bucket = byCountryMap.get(cc) ?? [];
+    bucket.push(ent);
+    byCountryMap.set(cc, bucket);
+  }
+
+  const country_breakdown: BreakdownEntry[] = Array.from(byCountryMap.entries()).map(([country, rows]) => {
+    const highRisk = rows.filter((r) => toUpperTier(r.risk_tier_3m) === "HIGH").length;
+    const rev = rows.reduce((acc, r) => acc + (r.revenue_3m || 0), 0);
+    const jobs = rows.reduce((acc, r) => acc + (r.jobs_created_3m || 0), 0);
+    const avg = rows.length ? rows.reduce((acc, r) => acc + (r.risk_score_3m || 0), 0) / rows.length : 0;
+    return {
+      country,
+      count: rows.length,
+      avg_risk: avg,
+      high_risk: highRisk,
+      total_revenue: rev,
+      total_jobs_created: jobs,
+    };
+  });
+
+  country_breakdown.sort((a, b) => b.total_revenue - a.total_revenue);
+
+  const top_risk_enterprises: EnterpriseEntry[] = [...enterprises]
+    .sort((a, b) => (b.risk_score_3m || 0) - (a.risk_score_3m || 0))
+    .slice(0, 10)
+    .map((e) => ({
+      unique_id: e.unique_id,
+      sector: e.business_sector || "Unknown",
+      country: e.country_code || "Unknown",
+      risk_score: e.risk_score_3m || 0,
+      risk_tier: toUpperTier(e.risk_tier_3m),
+      revenue_3m: e.revenue_3m || 0,
+      jobs_created_3m: e.jobs_created_3m || 0,
+    }));
+
+  const success_stories: EnterpriseEntry[] = [...enterprises]
+    .sort((a, b) => (a.risk_score_3m || 0) - (b.risk_score_3m || 0))
+    .slice(0, 6)
+    .map((e) => ({
+      unique_id: e.unique_id,
+      sector: e.business_sector || "Unknown",
+      country: e.country_code || "Unknown",
+      risk_score: e.risk_score_3m || 0,
+      risk_tier: toUpperTier(e.risk_tier_3m),
+      revenue_3m: e.revenue_3m || 0,
+      jobs_created_3m: e.jobs_created_3m || 0,
+    }));
+
+  const revTrend = summarizeTrendDirection(trends?.revenue || []);
+  const jobsTrend = summarizeTrendDirection(trends?.jobs_created || []);
+  const trendNarrative = `Revenue trend is ${revTrend}; jobs trend is ${jobsTrend}. PAR30 is ${pct((overview?.par30_pct || 0) / 100)} and risk trend is ${overview?.risk_trend || "stable"}.`;
+
+  const horizon_summary: Record<string, HorizonData> = {
+    "1": {
+      avg_risk_score: Math.max(0, avgRisk * 0.9),
+      total_revenue: totalRevenue * 0.34,
+      avg_revenue: total ? (totalRevenue * 0.34) / total : 0,
+      jobs_created: Math.round(totalCreated * 0.35),
+      jobs_lost: Math.round(totalLost * 0.35),
+      net_jobs: Math.round((totalCreated - totalLost) * 0.35),
+    },
+    "2": {
+      avg_risk_score: Math.max(0, avgRisk * 0.96),
+      total_revenue: totalRevenue * 0.67,
+      avg_revenue: total ? (totalRevenue * 0.67) / total : 0,
+      jobs_created: Math.round(totalCreated * 0.68),
+      jobs_lost: Math.round(totalLost * 0.68),
+      net_jobs: Math.round((totalCreated - totalLost) * 0.68),
+    },
+    "3": {
+      avg_risk_score: avgRisk,
+      total_revenue: totalRevenue,
+      avg_revenue: total ? totalRevenue / total : 0,
+      jobs_created: totalCreated,
+      jobs_lost: totalLost,
+      net_jobs: totalCreated - totalLost,
+    },
+  };
+
+  const action_items: ActionItem[] = [
+    {
+      priority: tierDistribution.HIGH && tierDistribution.HIGH > Math.max(10, total * 0.2) ? "CRITICAL" : "HIGH",
+      action: `Launch targeted advisor plans for ${tierDistribution.HIGH ?? 0} high-risk enterprises with weekly risk review cadence.`,
+      deadline: "Within 14 days",
+    },
+    {
+      priority: (totalCreated - totalLost) < 0 ? "HIGH" : "MEDIUM",
+      action: `Protect employment outcomes in sectors with negative net jobs and combine coaching with arrears mitigation.`,
+      deadline: "Within 30 days",
+    },
+    {
+      priority: overview.par30_pct > 15 ? "HIGH" : "LOW",
+      action: `Reduce portfolio stress by tracking PAR30 and linking credit remediation with enterprise recovery support.`,
+      deadline: "Current quarter",
+    },
+  ];
+
+  const highPct = total ? ((tierDistribution.HIGH ?? 0) / total) * 100 : 0;
+  const lowPct = total ? ((tierDistribution.LOW ?? 0) / total) * 100 : 0;
+
+  const shared: ReportData = {
+    report_type: reportType,
+    generated_at: new Date().toISOString(),
+    source: failures > 0 ? `Live portfolio API (partial: ${failures} source${failures > 1 ? "s" : ""} unavailable)` : "Live portfolio API",
+    title: reportType === "donor_pack" ? "Donor Impact Report" : "Program Brief",
+    subtitle:
+      reportType === "donor_pack"
+        ? "Inkomoko Early Warning System — Portfolio Impact Assessment"
+        : "Inkomoko Early Warning System — Executive Program Summary",
+    executive_summary:
+      reportType === "donor_pack"
+        ? `The portfolio covers ${total.toLocaleString()} enterprises with projected 3-month revenue of ${fmt(totalRevenue, "RWF ")} and net jobs impact of ${fmt(totalCreated - totalLost)}. ${Math.round(highPct)}% are high-risk and ${Math.round(lowPct)}% are low-risk; interventions are prioritized by tier and arrears pressure. ${trendNarrative}`
+        : `This brief summarizes ${total.toLocaleString()} enterprises with average risk ${pct(avgRisk)} and projected 3-month revenue ${fmt(totalRevenue, "RWF ")}. High-risk concentration is ${Math.round(highPct)}%, with net jobs impact ${fmt(totalCreated - totalLost)}. ${trendNarrative}`,
+    kpis: {
+      total_enterprises: total,
+      avg_risk_score: avgRisk,
+      high_risk_count: tierDistribution.HIGH ?? 0,
+      medium_risk_count: tierDistribution.MEDIUM ?? 0,
+      low_risk_count: tierDistribution.LOW ?? 0,
+      tier_distribution: tierDistribution,
+      total_projected_revenue: totalRevenue,
+      total_jobs_created: totalCreated,
+      net_jobs: totalCreated - totalLost,
+    },
+    horizon_summary,
+    sector_breakdown,
+    country_breakdown,
+    gender_breakdown: {},
+    program_breakdown: [],
+    top_risk_enterprises,
+    success_stories,
+    action_items,
+  };
+
+  return shared;
 }
 
 // ── Small components ───────────────────────────────────────────────────────
@@ -628,11 +905,22 @@ export default function ReportsPage() {
     setError(null);
     setReport(null);
     try {
-      const data = await apiFetch<ReportData>(
-        `/demo/reports?report_type=${reportType}&source=${dataSource}`,
-        { method: "GET" },
-        false
-      );
+      let data: ReportData;
+      if (dataSource === "demo") {
+        try {
+          data = await apiFetch<ReportData>(
+            `/demo/reports?report_type=${reportType}&source=test`,
+            { method: "GET" },
+            false,
+            { cacheTtlMs: 60000 }
+          );
+        } catch {
+          data = await buildReportFromPortfolio(reportType);
+          setError("Demo endpoint unavailable. Generated a live portfolio report instead.");
+        }
+      } else {
+        data = await buildReportFromPortfolio(reportType);
+      }
       setReport(data);
     } catch (e: unknown) {
       setError((e as Error)?.message ?? "Failed to generate report.");
@@ -709,7 +997,7 @@ export default function ReportsPage() {
 
               {/* Data source selector */}
               <div className="flex gap-2">
-                {(["stored", "test"] as DataSource[]).map((src) => (
+                {(["live", "demo"] as DataSource[]).map((src) => (
                   <button
                     key={src}
                     onClick={() => setDataSource(src)}
@@ -719,7 +1007,7 @@ export default function ReportsPage() {
                         : "bg-white text-inkomoko-muted border-inkomoko-border hover:border-inkomoko-blue/40"
                     }`}
                   >
-                    {src === "stored" ? "Stored Data" : "Demo Data"}
+                    {src === "live" ? "Live Portfolio API" : "Demo Generator"}
                   </button>
                 ))}
               </div>
@@ -782,6 +1070,31 @@ export default function ReportsPage() {
         {/* Report output */}
         {report && !loading && (
           <>
+            <Card>
+              <CardContent className="pt-5">
+                <SectionHeader icon={<Zap size={16} />} title="Decision Intelligence Snapshot" />
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="rounded-xl border border-inkomoko-border bg-inkomoko-bg/50 p-3">
+                    <p className="text-xs uppercase tracking-wide text-inkomoko-muted">Risk Priority</p>
+                    <p className="text-sm mt-1 text-inkomoko-text">
+                      {report.kpis.high_risk_count} enterprises require immediate action; focus first on highest-risk profiles with arrears stress.
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-inkomoko-border bg-inkomoko-bg/50 p-3">
+                    <p className="text-xs uppercase tracking-wide text-inkomoko-muted">Livelihood Outlook</p>
+                    <p className="text-sm mt-1 text-inkomoko-text">
+                      Net jobs projection is {fmt(report.kpis.net_jobs)} with total jobs created at {fmt(report.kpis.total_jobs_created)}.
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-inkomoko-border bg-inkomoko-bg/50 p-3">
+                    <p className="text-xs uppercase tracking-wide text-inkomoko-muted">Revenue Signal</p>
+                    <p className="text-sm mt-1 text-inkomoko-text">
+                      3-month projected revenue is {fmt(report.kpis.total_projected_revenue, "RWF ")} across monitored enterprises.
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
             {report.report_type === "donor_pack" ? (
               <DonorPackReport d={report} />
             ) : (

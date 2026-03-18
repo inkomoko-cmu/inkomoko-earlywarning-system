@@ -11,34 +11,13 @@ import {
 } from "lucide-react";
 import { RequireRole } from "@/components/auth/RequireRole";
 import { apiFetch } from "@/lib/api";
+import { normalizePortfolioOverview, type PortfolioOverview } from "@/lib/portfolio";
 
 // ──────────────────────────────────────── TYPES ──────────────────────────────────────────
 
-type PortfolioOverview = {
-  total_loans: number;
-  total_disbursed: number;
-  total_outstanding: number;
-  avg_days_in_arrears: number;
-  par30_pct: number;
-  par30_amount: number;
-  defaulted_count: number;
-  closed_count: number;
-  active_count: number;
-  avg_revenue_3m: number;
-  total_jobs_created_3m: number;
-  total_jobs_lost_3m: number;
-  nps_promoter_pct: number;
-  nps_detractor_pct: number;
-  high_risk_count: number;
-  medium_risk_count: number;
-  low_risk_count: number;
-  revenue_delta_pct: number;
-  risk_trend: string;
-};
-
 type RiskDistribution = {
-  tier: string;
-  count: number;
+  name: string;
+  value: number;
   pct: number;
 };
 
@@ -98,20 +77,33 @@ export default function PortfolioPage() {
   }, [allLoans]);
 
   // ──────── Load all data ────────────
-  const loadData = async () => {
+  const loadData = async (forceRefresh = false) => {
     try {
       setLoading(true);
       setApiError(null);
-      const [overviewRes, riskRes, countriesRes, loansRes] = await Promise.all([
-        apiFetch<PortfolioOverview>("/portfolio/overview", { method: "GET" }, true),
-        apiFetch<RiskDistribution[]>("/portfolio/risk-distribution", { method: "GET" }, true),
-        apiFetch<PortfolioByCountry[]>("/portfolio/by-country", { method: "GET" }, true),
-        apiFetch<PortfolioLoan[]>("/portfolio/loans", { method: "GET" }, true),
+      const [overviewRes, riskRes, countriesRes, loansRes] = await Promise.allSettled([
+        apiFetch<PortfolioOverview>("/portfolio/overview", { method: "GET" }, true, { cacheTtlMs: 120000, forceRefresh }),
+        apiFetch<RiskDistribution[]>("/portfolio/risk-distribution", { method: "GET" }, true, { cacheTtlMs: 120000, forceRefresh }),
+        apiFetch<PortfolioByCountry[]>("/portfolio/by-country", { method: "GET" }, true, { cacheTtlMs: 120000, forceRefresh }),
+        apiFetch<PortfolioLoan[]>("/portfolio/loans", { method: "GET" }, true, { cacheTtlMs: 120000, forceRefresh }),
       ]);
-      setOverview(overviewRes);
-      setRiskDistribution(riskRes);
-      setByCountry(countriesRes);
-      setAllLoans(loansRes);
+
+      if (overviewRes.status === "fulfilled") setOverview(normalizePortfolioOverview(overviewRes.value));
+      else setOverview(null);
+
+      if (riskRes.status === "fulfilled") setRiskDistribution(riskRes.value || []);
+      else setRiskDistribution([]);
+
+      if (countriesRes.status === "fulfilled") setByCountry(countriesRes.value || []);
+      else setByCountry([]);
+
+      if (loansRes.status === "fulfilled") setAllLoans(loansRes.value || []);
+      else setAllLoans([]);
+
+      const failed = [overviewRes, riskRes, countriesRes, loansRes].filter((r) => r.status === "rejected").length;
+      if (failed > 0) {
+        setApiError(`Loaded with partial data (${failed} source${failed > 1 ? "s" : ""} unavailable).`);
+      }
       setPage(0); // Reset to first page
     } catch (e: any) {
       setApiError(e?.message ?? "Failed to load portfolio data.");
@@ -184,7 +176,7 @@ export default function PortfolioPage() {
   // ──────── Risk tier distribution ────────────
   const riskStats = useMemo(() => {
     const map: Record<string, RiskDistribution | undefined> = {};
-    riskDistribution.forEach(r => { map[r.tier] = r; });
+    riskDistribution.forEach(r => { map[(r.name || "").toUpperCase()] = r; });
     return {
       high: map['HIGH'],
       medium: map['MEDIUM'],
@@ -233,7 +225,7 @@ export default function PortfolioPage() {
             <div className="flex flex-col gap-3 xl:items-end">
               <div className="flex flex-wrap gap-2 xl:justify-end">
                 <button
-                  onClick={loadData}
+                  onClick={() => loadData(true)}
                   disabled={loading}
                   className="rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-white/20 disabled:opacity-40 flex items-center gap-1.5"
                 >
@@ -304,13 +296,13 @@ export default function PortfolioPage() {
               ) : (
                 <>
                   {riskStats.high && (
-                    <RiskBar tier="High Risk" count={riskStats.high.count} pct={riskStats.high.pct} color="bg-red-600" />
+                    <RiskBar tier="High Risk" count={riskStats.high.value} pct={riskStats.high.pct} color="bg-red-600" />
                   )}
                   {riskStats.medium && (
-                    <RiskBar tier="Medium Risk" count={riskStats.medium.count} pct={riskStats.medium.pct} color="bg-amber-500" />
+                    <RiskBar tier="Medium Risk" count={riskStats.medium.value} pct={riskStats.medium.pct} color="bg-amber-500" />
                   )}
                   {riskStats.low && (
-                    <RiskBar tier="Low Risk" count={riskStats.low.count} pct={riskStats.low.pct} color="bg-emerald-600" />
+                    <RiskBar tier="Low Risk" count={riskStats.low.value} pct={riskStats.low.pct} color="bg-emerald-600" />
                   )}
                   {riskDistribution.length === 0 && (
                     <p className="text-sm text-inkomoko-muted text-center py-4">No risk data available</p>

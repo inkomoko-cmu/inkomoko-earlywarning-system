@@ -24,6 +24,7 @@ export type RiskTier = "Low" | "Medium" | "High";
 
 export type EnterpriseRow = {
   id: string;
+  enterpriseName: string;
   country: Country;
   program: string;
   cohort: string;

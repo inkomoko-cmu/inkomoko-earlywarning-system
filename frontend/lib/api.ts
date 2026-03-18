@@ -16,6 +16,24 @@ export function dispatchUnauthorized() {
 
 type ApiError = Error & { status?: number; detail?: string };
 
+type ApiFetchConfig = {
+  cacheTtlMs?: number;
+  forceRefresh?: boolean;
+};
+
+type CacheEntry = {
+  expiresAt: number;
+  value: unknown;
+};
+
+const responseCache = new Map<string, CacheEntry>();
+const inFlightGets = new Map<string, Promise<unknown>>();
+
+function buildCacheKey(path: string, withAuth: boolean) {
+  const tokenSuffix = withAuth ? getSession()?.access_token?.slice(-16) || "anon" : "public";
+  return `${path}::${tokenSuffix}`;
+}
+
 function makeError(message: string, status?: number, detail?: string): ApiError {
   const e = new Error(message) as ApiError;
   e.status = status;
@@ -26,8 +44,26 @@ function makeError(message: string, status?: number, detail?: string): ApiError 
 export async function apiFetch<T>(
   path: string,
   options: RequestInit = {},
-  withAuth: boolean = true // Change default to true so all requests send the token
+  withAuth: boolean = true, // Change default to true so all requests send the token
+  config: ApiFetchConfig = {}
 ): Promise<T> {
+  const method = (options.method || "GET").toUpperCase();
+  const cacheTtlMs = config.cacheTtlMs || 0;
+  const isCacheableGet = method === "GET" && cacheTtlMs > 0;
+  const cacheKey = isCacheableGet ? buildCacheKey(path, withAuth) : "";
+
+  if (isCacheableGet && !config.forceRefresh) {
+    const cached = responseCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.value as T;
+    }
+
+    const pending = inFlightGets.get(cacheKey);
+    if (pending) {
+      return (await pending) as T;
+    }
+  }
+
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     ...(options.headers as any),
@@ -38,47 +74,65 @@ export async function apiFetch<T>(
     if (s?.access_token) headers.Authorization = `Bearer ${s.access_token}`;
   }
 
-  let res: Response;
+  const runRequest = async (): Promise<T> => {
+    let res: Response;
 
-  try {
-    res = await fetch(`${BASE}${path}`, { ...options, headers });
-  } catch {
-    // Network / server down / CORS
-    throw makeError("Network error: cannot reach API server.", 0);
+    try {
+      res = await fetch(`${BASE}${path}`, { ...options, headers });
+    } catch {
+      // Network / server down / CORS
+      throw makeError("Network error: cannot reach API server.", 0);
+    }
+
+    if (res.ok) {
+      // If response has no body (204), return null
+      const data = (res.status === 204 ? null : await res.json()) as T;
+      if (isCacheableGet) {
+        responseCache.set(cacheKey, {
+          value: data,
+          expiresAt: Date.now() + cacheTtlMs,
+        });
+      }
+      return data;
+    }
+
+    // Try parse error body
+    let detail = "";
+    try {
+      const body = await res.json();
+      detail = body?.detail ? String(body.detail) : "";
+    } catch {
+      detail = "";
+    }
+
+    // ✅ Clean logout on 401 — dispatches an event so AuthProvider handles state,
+    // avoiding a hard-reload bounce loop (window.location.href was the old bug).
+    if (res.status === 401 && withAuth) {
+      dispatchUnauthorized();
+      throw makeError("Session expired. Please sign in again.", 401, detail);
+    }
+
+    // Friendly messages
+    if (res.status === 403) {
+      throw makeError(detail || "Access denied.", 403, detail);
+    }
+    if (res.status === 400) {
+      throw makeError(detail || "Bad request.", 400, detail);
+    }
+    if (res.status >= 500) {
+      throw makeError("Server error. Please try again later.", res.status, detail);
+    }
+
+    throw makeError(detail || `Request failed (${res.status}).`, res.status, detail);
+  };
+
+  if (!isCacheableGet) {
+    return runRequest();
   }
 
-  if (res.ok) {
-    // If response has no body (204), return null
-    if (res.status === 204) return null as unknown as T;
-    return (await res.json()) as T;
-  }
-
-  // Try parse error body
-  let detail = "";
-  try {
-    const body = await res.json();
-    detail = body?.detail ? String(body.detail) : "";
-  } catch {
-    detail = "";
-  }
-
-  // ✅ Clean logout on 401 — dispatches an event so AuthProvider handles state,
-  // avoiding a hard-reload bounce loop (window.location.href was the old bug).
-  if (res.status === 401 && withAuth) {
-    dispatchUnauthorized();
-    throw makeError("Session expired. Please sign in again.", 401, detail);
-  }
-
-  // Friendly messages
-  if (res.status === 403) {
-    throw makeError(detail || "Access denied.", 403, detail);
-  }
-  if (res.status === 400) {
-    throw makeError(detail || "Bad request.", 400, detail);
-  }
-  if (res.status >= 500) {
-    throw makeError("Server error. Please try again later.", res.status, detail);
-  }
-
-  throw makeError(detail || `Request failed (${res.status}).`, res.status, detail);
+  const req = runRequest().finally(() => {
+    inFlightGets.delete(cacheKey);
+  });
+  inFlightGets.set(cacheKey, req as Promise<unknown>);
+  return req;
 }

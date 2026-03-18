@@ -6,6 +6,7 @@ import { cn } from "@/lib/ui";
 import {
   BarChart3,
   BookOpen,
+  Building2,
   BrainCircuit,
   FileText,
   Gauge,
@@ -27,6 +28,7 @@ type NavItem = {
 const ALL_NAV: NavItem[] = [
   { href: "/", label: "Overview", icon: LayoutDashboard },
   { href: "/portfolio", label: "Portfolio", icon: BarChart3 },
+  { href: "/profiles", label: "Enterprise Profiles", icon: Building2 },
   { href: "/scenarios", label: "Scenarios", icon: Gauge },
   { href: "/advisory", label: "Advisory", icon: Sparkles },
   { href: "/models", label: "Model Cards", icon: BrainCircuit },
@@ -44,12 +46,12 @@ function navForRole(role: Role | null | undefined): NavItem[] {
   if (role === "Admin") return ALL_NAV;
 
   if (role === "Program Manager") {
-    const allowed = new Set(["/", "/portfolio", "/scenarios", "/models", "/reports"]);
+    const allowed = new Set(["/", "/portfolio", "/profiles", "/scenarios", "/models", "/reports"]);
     return ALL_NAV.filter((x) => allowed.has(x.href));
   }
 
   if (role === "Advisor") {
-    const allowed = new Set(["/", "/advisory", "/portfolio", "/reports"]);
+    const allowed = new Set(["/", "/advisory", "/portfolio", "/profiles", "/reports"]);
     return ALL_NAV.filter((x) => allowed.has(x.href));
   }
 

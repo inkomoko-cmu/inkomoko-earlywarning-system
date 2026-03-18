@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardDescription, CardTitle } from "@/com
 import { Badge } from "@/components/ui/Badge";
 import { ArrowDownRight, ArrowRight, ArrowUpRight } from "lucide-react";
 import { apiFetch } from "@/lib/api";
+import { normalizePortfolioOverview, type PortfolioOverview } from "@/lib/portfolio";
 
 interface KPI {
   label: string;
@@ -12,19 +13,6 @@ interface KPI {
   delta: string;
   trend: "up" | "down" | "flat";
   tone: "success" | "danger" | "warning" | "neutral";
-}
-
-interface PortfolioOverview {
-  total_active_enterprises: number;
-  total_jobs_created_3m: number;
-  total_jobs_lost_3m: number;
-  total_revenue_forecasted_3m: number;
-  high_risk_count: number;
-  medium_risk_count: number;
-  low_risk_count: number;
-  nps_promoter_pct: number;
-  par30_pct: number;
-  avg_employment_per_enterprise: number;
 }
 
 export function KpiGrid() {
@@ -38,26 +26,27 @@ export function KpiGrid() {
         setLoading(true);
         setApiError(null);
 
-        const data = await apiFetch<PortfolioOverview>(
+        const raw = await apiFetch<PortfolioOverview>(
           "/portfolio/overview",
           { method: "GET" },
           true
         );
+        const data = normalizePortfolioOverview(raw);
 
         if (data) {
-          // Calculate KPIs with trends
+          const enterpriseCount = (data.high_risk_count || 0) + (data.medium_risk_count || 0) + (data.low_risk_count || 0);
           const jobNet = (data.total_jobs_created_3m || 0) - (data.total_jobs_lost_3m || 0);
           const jobTrend = jobNet > 0 ? "up" : jobNet < 0 ? "down" : "flat";
-          const profitTrend = (data.total_revenue_forecasted_3m || 0) > 480_000_000 ? "up" : "flat";
-          const riskTrend = (data.high_risk_count || 0) > 650 ? "up" : "down";
+          const profitTrend = (data.revenue_delta_pct || 0) >= 0 ? "up" : "down";
+          const riskTrend = data.risk_trend === "degrading" ? "up" : data.risk_trend === "improving" ? "down" : "flat";
 
           const kpisList: KPI[] = [
             {
               label: "Active Enterprises",
-              value: data.total_active_enterprises?.toLocaleString() || "—",
-              delta: "+2.5%",
-              trend: "up",
-              tone: "success",
+              value: enterpriseCount.toLocaleString(),
+              delta: `${data.active_count.toLocaleString()} active loans`,
+              trend: "flat",
+              tone: "neutral",
             },
             {
               label: "Net Job Creation (3M)",
@@ -68,17 +57,17 @@ export function KpiGrid() {
             },
             {
               label: "Revenue Forecast (3M)",
-              value: `$${(data.total_revenue_forecasted_3m / 1_000_000).toFixed(0)}M` || "—",
-              delta: "+12%",
+              value: `$${(data.avg_revenue_3m / 1_000_000).toFixed(1)}M`,
+              delta: `${data.revenue_delta_pct >= 0 ? "+" : ""}${data.revenue_delta_pct.toFixed(1)}%`,
               trend: profitTrend as "up" | "down" | "flat",
-              tone: "success",
+              tone: profitTrend === "down" ? "warning" : "success",
             },
             {
               label: "High Risk",
               value: data.high_risk_count?.toLocaleString() || "—",
-              delta: riskTrend === "up" ? "+5%" : "-3%",
+              delta: `PAR30 ${data.par30_pct.toFixed(1)}%`,
               trend: riskTrend as "up" | "down" | "flat",
-              tone: riskTrend === "up" ? "danger" : "success",
+              tone: riskTrend === "up" ? "danger" : riskTrend === "down" ? "success" : "neutral",
             },
           ];
 

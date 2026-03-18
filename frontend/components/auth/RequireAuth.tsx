@@ -29,6 +29,7 @@ function allowedPrefixes(role: Role): string[] {
       return [
         ...base,
         "/portfolio",
+        "/profiles",
         "/advisory",
         "/reports",
         "/scenarios",
@@ -39,9 +40,9 @@ function allowedPrefixes(role: Role): string[] {
         "/docs",
       ];
     case "Program Manager":
-      return [...base, "/portfolio", "/scenarios", "/models", "/reports", "/settings"];
+      return [...base, "/portfolio", "/profiles", "/scenarios", "/models", "/reports", "/settings"];
     case "Advisor":
-      return [...base, "/advisory", "/portfolio", "/reports", "/settings"];
+      return [...base, "/advisory", "/portfolio", "/profiles", "/reports", "/settings"];
     case "Donor":
       return [...base, "/reports"]; // donor minimal + overview
     default:

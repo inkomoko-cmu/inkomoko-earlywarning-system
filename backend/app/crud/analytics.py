@@ -8,10 +8,26 @@ with support for trends, segments, and statistical confidence intervals.
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Optional, Dict, List, Tuple, Any
-from sqlalchemy import func, and_, or_, select, literal_column, cast, Numeric, Integer, Boolean, Date
+from sqlalchemy import func, and_, or_, select, literal_column, cast, Numeric, Integer, Boolean, Date, desc, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.business import CoreBankingLoan, ImpactData
+
+
+def _effective_disbursed_expr():
+    """
+    Return a safe disbursed-amount expression.
+
+    Some datasets have disbursed_amount populated as 0; in that case we fall back
+    to approved_amount, then applied_amount, then current_balance.
+    """
+    return func.coalesce(
+        func.nullif(cast(CoreBankingLoan.disbursed_amount, Numeric), 0),
+        func.nullif(cast(CoreBankingLoan.approved_amount, Numeric), 0),
+        func.nullif(cast(CoreBankingLoan.applied_amount, Numeric), 0),
+        cast(CoreBankingLoan.current_balance, Numeric),
+        0,
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -46,7 +62,7 @@ async def get_portfolio_summary(db: AsyncSession, country_code: Optional[str] = 
     # Loan metrics - simple aggregations
     loan_query = select(
         func.count().label('total_loans'),
-        func.coalesce(func.sum(cast(CoreBankingLoan.disbursed_amount, Numeric)), 0).label('total_disbursed'),
+        func.coalesce(func.sum(_effective_disbursed_expr()), 0).label('total_disbursed'),
         func.coalesce(func.sum(cast(CoreBankingLoan.current_balance, Numeric)), 0).label('total_outstanding'),
         func.coalesce(func.avg(cast(CoreBankingLoan.days_in_arrears, Integer)), 0).label('avg_days_in_arrears'),
     )
@@ -249,16 +265,18 @@ async def get_monthly_trends(
     for row in revenue_rows:
         if row.avg_revenue is not None:
             # Simple confidence interval: mean ± 1.96*se (95% CI)
-            std = row.std_revenue or 0
-            se = (std / (row.count_records ** 0.5)) if row.count_records > 0 else 0
+            avg = float(row.avg_revenue or 0)
+            std = float(row.std_revenue or 0)
+            n = int(row.count_records or 0)
+            se = (std / (n ** 0.5)) if n > 0 else 0
             ci = 1.96 * se if se > 0 else 0
             
             revenue_series.append({
                 'month': row.survey_date.strftime('%Y-%m') if row.survey_date else None,
-                'value': float(row.avg_revenue),
-                'upper_ci': float(row.avg_revenue + ci),
-                'lower_ci': float(row.avg_revenue - ci),
-                'n': row.count_records,
+                'value': avg,
+                'upper_ci': avg + ci,
+                'lower_ci': avg - ci,
+                'n': n,
             })
     
     # Jobs created trend
@@ -304,7 +322,7 @@ async def get_by_country(db: AsyncSession) -> List[Dict[str, Any]]:
     query = select(
         CoreBankingLoan.country_code,
         func.count().label('loans'),
-        func.coalesce(func.sum(cast(CoreBankingLoan.disbursed_amount, Numeric)), 0).label('total_disbursed'),
+        func.coalesce(func.sum(_effective_disbursed_expr()), 0).label('total_disbursed'),
         func.coalesce(func.sum(cast(CoreBankingLoan.current_balance, Numeric)), 0).label('total_outstanding'),
     ).group_by(CoreBankingLoan.country_code).order_by(CoreBankingLoan.country_code)
     
@@ -330,7 +348,9 @@ async def get_by_sector(db: AsyncSession) -> List[Dict[str, Any]]:
         ImpactData.business_sector,
         func.count(func.distinct(ImpactData.unique_id)).label('client_count'),
         func.coalesce(func.sum(cast(ImpactData.jobs_created_3m, Integer)), 0).label('jobs_created'),
-        func.coalesce(func.avg(cast(ImpactData.revenue, Numeric)), 0).label('avg_revenue'),
+        func.coalesce(func.sum(cast(ImpactData.jobs_lost_3m, Integer)), 0).label('jobs_lost'),
+        func.coalesce(func.sum(cast(ImpactData.revenue_3m, Numeric)), 0).label('total_revenue'),
+        func.coalesce(func.avg(cast(ImpactData.revenue_3m, Numeric)), 0).label('avg_revenue'),
         func.count().filter(ImpactData.risk_tier_3m == 'HIGH').label('high_risk_count'),
     ).group_by(ImpactData.business_sector).order_by(
         func.count(func.distinct(ImpactData.unique_id)).desc()
@@ -344,6 +364,8 @@ async def get_by_sector(db: AsyncSession) -> List[Dict[str, Any]]:
             'sector': r.business_sector or 'Unknown',
             'client_count': r.client_count or 0,
             'jobs_created': r.jobs_created or 0,
+            'jobs_lost': r.jobs_lost or 0,
+            'total_revenue': float(r.total_revenue or 0),
             'avg_revenue': float(r.avg_revenue or 0),
             'high_risk_count': r.high_risk_count or 0,
         }
@@ -362,7 +384,7 @@ async def get_loans(db: AsyncSession, country_code: Optional[str] = None) -> Lis
         CoreBankingLoan.country_code,
         CoreBankingLoan.industry_sector,
         CoreBankingLoan.loan_status,
-        cast(CoreBankingLoan.disbursed_amount, Numeric),
+        _effective_disbursed_expr(),
         cast(CoreBankingLoan.current_balance, Numeric),
         CoreBankingLoan.days_in_arrears,
         CoreBankingLoan.installment_in_arrears,
@@ -389,6 +411,204 @@ async def get_loans(db: AsyncSession, country_code: Optional[str] = None) -> Lis
         }
         for r in rows
     ]
+
+
+async def get_enterprise_profiles(
+    db: AsyncSession,
+    country_code: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Get enterprise-level profiles from impact_data.
+
+    Returns DB-backed unique_id records with risk/revenue/jobs 3M projections.
+    """
+    query = select(
+        ImpactData.unique_id,
+        ImpactData.country_code,
+        ImpactData.business_sector,
+        cast(ImpactData.survey_date, Date),
+        ImpactData.risk_tier_3m,
+        cast(ImpactData.risk_score_3m, Numeric),
+        cast(ImpactData.revenue_3m, Numeric),
+        cast(ImpactData.jobs_created_3m, Integer),
+        cast(ImpactData.jobs_lost_3m, Integer),
+    )
+
+    if country_code:
+        query = query.where(ImpactData.country_code == country_code)
+
+    query = query.order_by(cast(ImpactData.survey_date, Date).desc(), ImpactData.unique_id)
+
+    result = await db.execute(query)
+    rows = result.all()
+
+    return [
+        {
+            'unique_id': r[0],
+            'country_code': r[1],
+            'business_sector': r[2],
+            'survey_date': r[3].isoformat() if r[3] else None,
+            'risk_tier_3m': r[4],
+            'risk_score_3m': float(r[5] or 0),
+            'revenue_3m': float(r[6] or 0),
+            'jobs_created_3m': int(r[7] or 0),
+            'jobs_lost_3m': int(r[8] or 0),
+        }
+        for r in rows
+    ]
+
+
+async def get_enterprise_profile_detail(
+    db: AsyncSession,
+    unique_id: str,
+) -> Optional[Dict[str, Any]]:
+    """
+    Get a single enterprise profile with related loans and AI-style insights.
+    """
+    enterprise_query = select(
+        ImpactData.unique_id,
+        ImpactData.country_code,
+        ImpactData.business_sector,
+        cast(ImpactData.survey_date, Date),
+        ImpactData.risk_tier_3m,
+        cast(ImpactData.risk_score_3m, Numeric),
+        cast(ImpactData.revenue_3m, Numeric),
+        cast(ImpactData.jobs_created_3m, Integer),
+        cast(ImpactData.jobs_lost_3m, Integer),
+    ).where(ImpactData.unique_id == unique_id)
+
+    enterprise_row = (await db.execute(enterprise_query)).first()
+    if not enterprise_row:
+        return None
+
+    enterprise = {
+        'unique_id': enterprise_row[0],
+        'country_code': enterprise_row[1],
+        'country_specific': enterprise_row[1],
+        'business_sector': enterprise_row[2],
+        'business_sub_sector': None,
+        'survey_date': enterprise_row[3].isoformat() if enterprise_row[3] else None,
+        'risk_tier_3m': enterprise_row[4],
+        'risk_score_3m': float(enterprise_row[5] or 0),
+        'revenue_3m': float(enterprise_row[6] or 0),
+        'jobs_created_3m': int(enterprise_row[7] or 0),
+        'jobs_lost_3m': int(enterprise_row[8] or 0),
+        'plan_after_program': None,
+    }
+
+    country_code = enterprise['country_code'] or ""
+    business_sector = enterprise['business_sector']
+
+    loans_query = select(
+        CoreBankingLoan.loan_number,
+        CoreBankingLoan.country_code,
+        CoreBankingLoan.industry_sector,
+        CoreBankingLoan.loan_status,
+        _effective_disbursed_expr(),
+        cast(CoreBankingLoan.current_balance, Numeric),
+        CoreBankingLoan.days_in_arrears,
+        CoreBankingLoan.installment_in_arrears,
+    ).where(CoreBankingLoan.country_code == country_code)
+
+    sector_priority = case(
+        (CoreBankingLoan.industry_sector == business_sector, 0),
+        else_=1,
+    ) if business_sector else 1
+
+    loans_query = loans_query.order_by(
+        sector_priority,
+        desc(CoreBankingLoan.days_in_arrears),
+        desc(cast(CoreBankingLoan.current_balance, Numeric)),
+    ).limit(8)
+
+    loan_rows = (await db.execute(loans_query)).all()
+
+    related_loans = [
+        {
+            'loannumber': r[0],
+            'country_code': r[1],
+            'industrysectorofactivity': r[2],
+            'loanstatus': r[3],
+            'disbursedamount': float(r[4] or 0),
+            'currentbalance': float(r[5] or 0),
+            'daysinarrears': int(r[6] or 0),
+            'installmentinarrears': int(r[7] or 0),
+        }
+        for r in loan_rows
+    ]
+
+    loan_count = len(related_loans)
+    high_arrears_count = sum(1 for loan in related_loans if loan['daysinarrears'] > 30)
+    total_outstanding = sum(loan['currentbalance'] for loan in related_loans)
+    avg_arrears_days = (sum(loan['daysinarrears'] for loan in related_loans) / loan_count) if loan_count else 0.0
+    net_jobs = enterprise['jobs_created_3m'] - enterprise['jobs_lost_3m']
+
+    risk_score = enterprise['risk_score_3m']
+    if risk_score >= 0.7:
+        risk_severity = 'high'
+    elif risk_score >= 0.4:
+        risk_severity = 'medium'
+    else:
+        risk_severity = 'low'
+
+    insights: List[Dict[str, Any]] = [
+        {
+            'type': 'risk',
+            'title': 'Early warning risk posture',
+            'detail': f"Risk tier {enterprise['risk_tier_3m']} with a score of {risk_score:.2f}. Prioritize closer follow-up if score stays above 0.70.",
+            'severity': risk_severity,
+            'confidence': round(min(0.98, 0.55 + (risk_score * 0.4)), 2),
+        },
+        {
+            'type': 'employment',
+            'title': 'Employment outlook signal',
+            'detail': f"Projected jobs net change is {net_jobs:+d} over 3 months ({enterprise['jobs_created_3m']} created, {enterprise['jobs_lost_3m']} lost).",
+            'severity': 'high' if net_jobs < 0 else ('medium' if net_jobs == 0 else 'low'),
+            'confidence': 0.82,
+        },
+        {
+            'type': 'portfolio',
+            'title': 'Loan stress context',
+            'detail': f"{high_arrears_count}/{loan_count} related loans are beyond 30 days in arrears with total outstanding exposure of {total_outstanding:,.0f}.",
+            'severity': 'high' if high_arrears_count >= 3 else ('medium' if high_arrears_count > 0 else 'low'),
+            'confidence': 0.79,
+        },
+    ]
+
+    actions: List[Dict[str, Any]] = [
+        {
+            'priority': 'P1' if risk_score >= 0.7 else 'P2',
+            'owner': 'Advisor',
+            'action': 'Run cashflow review and agree a short-cycle intervention plan.',
+            'target_days': 7 if risk_score >= 0.7 else 14,
+        },
+        {
+            'priority': 'P2',
+            'owner': 'Program Manager',
+            'action': 'Validate portfolio exposure and monitor arrears trajectory weekly.',
+            'target_days': 14,
+        },
+        {
+            'priority': 'P3' if net_jobs >= 0 else 'P2',
+            'owner': 'Business Coach',
+            'action': 'Execute market linkage and retention support to protect jobs.',
+            'target_days': 21,
+        },
+    ]
+
+    return {
+        'enterprise': enterprise,
+        'related_loans': related_loans,
+        'portfolio_context': {
+            'loan_count': loan_count,
+            'high_arrears_count': high_arrears_count,
+            'avg_arrears_days': round(avg_arrears_days, 2),
+            'total_outstanding': round(total_outstanding, 2),
+            'net_jobs_3m': net_jobs,
+        },
+        'insights': insights,
+        'actions': actions,
+    }
 
 
 # ═════════════════════════════════════════════════════════════════════════════════

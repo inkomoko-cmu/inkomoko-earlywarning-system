@@ -15,6 +15,7 @@ export const KPIS: PortfolioKPI[] = [
 ];
 
 export const ENTERPRISES: EnterpriseRow[] = Array.from({ length: 36 }).map((_, i) => {
+  const enterpriseName = `ENT-${String(i + 1).padStart(4, "0")}`;
   const country = COUNTRIES[i % COUNTRIES.length];
   const program = PROGRAMS[i % PROGRAMS.length];
   const cohort = COHORTS[i % COHORTS.length];
@@ -33,6 +34,7 @@ export const ENTERPRISES: EnterpriseRow[] = Array.from({ length: 36 }).map((_, i
 
   return {
     id: uuid(),
+    enterpriseName,
     country,
     program,
     cohort,

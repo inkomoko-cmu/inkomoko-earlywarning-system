@@ -14,24 +14,12 @@ import {
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { ErrorCard } from "@/components/ui/ErrorCard";
-
-type OverviewData = {
-  total_loans: number;
-  total_disbursed: number;
-  total_outstanding: number;
-  avg_days_in_arrears: number;
-  par30_amount: number;
-  jobs_created_3m: number;
-  jobs_lost_3m: number;
-  avg_revenue_3m: number;
-  nps_promoter_pct: number;
-  nps_detractor_pct: number;
-};
+import { normalizePortfolioOverview, type PortfolioOverview } from "@/lib/portfolio";
 
 export default function OverviewPage() {
   const { session } = useAuth();
 
-  const [overview, setOverview] = useState<OverviewData | null>(null);
+  const [overview, setOverview] = useState<PortfolioOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState<string | null>(null);
 
@@ -39,8 +27,8 @@ export default function OverviewPage() {
     try {
       setLoading(true);
       setApiError(null);
-      const res = await apiFetch<OverviewData>("/portfolio/overview", { method: "GET" }, true);
-      setOverview(res);
+      const res = await apiFetch<PortfolioOverview>("/portfolio/overview", { method: "GET" }, true);
+      setOverview(normalizePortfolioOverview(res));
     } catch (e: any) {
       setApiError(e?.message ?? "Failed to load overview data.");
     } finally {
@@ -60,8 +48,8 @@ export default function OverviewPage() {
       { Metric: "Total Outstanding", Value: overview.total_outstanding },
       { Metric: "Average Days in Arrears", Value: overview.avg_days_in_arrears },
       { Metric: "PAR30 Amount", Value: overview.par30_amount },
-      { Metric: "Jobs Created (3M)", Value: overview.jobs_created_3m },
-      { Metric: "Jobs Lost (3M)", Value: overview.jobs_lost_3m },
+      { Metric: "Jobs Created (3M)", Value: overview.total_jobs_created_3m },
+      { Metric: "Jobs Lost (3M)", Value: overview.total_jobs_lost_3m },
       { Metric: "Average Revenue (3M)", Value: overview.avg_revenue_3m },
       { Metric: "NPS Promoters", Value: overview.nps_promoter_pct },
       { Metric: "NPS Detractors", Value: overview.nps_detractor_pct },
@@ -77,8 +65,8 @@ export default function OverviewPage() {
       { KPI: "Total Outstanding", Value: formatMoney(overview.total_outstanding) },
       { KPI: "PAR30 Amount", Value: formatMoney(overview.par30_amount) },
       { KPI: "Avg Days in Arrears", Value: overview.avg_days_in_arrears?.toFixed(2) ?? "—" },
-      { KPI: "Jobs Created (3M)", Value: overview.jobs_created_3m },
-      { KPI: "Jobs Lost (3M)", Value: overview.jobs_lost_3m },
+      { KPI: "Jobs Created (3M)", Value: overview.total_jobs_created_3m },
+      { KPI: "Jobs Lost (3M)", Value: overview.total_jobs_lost_3m },
       { KPI: "Avg Revenue (3M)", Value: formatMoney(overview.avg_revenue_3m) },
       { KPI: "NPS Promoters", Value: overview.nps_promoter_pct },
       { KPI: "NPS Detractors", Value: overview.nps_detractor_pct },
@@ -195,8 +183,8 @@ export default function OverviewPage() {
       <div>
         <SectionLabel title="Impact Metrics" accent="bg-emerald-500" />
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
-          <StatCard label="Jobs Created (3M)"   value={overview?.jobs_created_3m?.toLocaleString() ?? "—"} icon={<UserCheck size={16} />}  color="green" loading={loading} />
-          <StatCard label="Jobs Lost (3M)"      value={overview?.jobs_lost_3m?.toLocaleString() ?? "—"}    icon={<UserMinus size={16} />}  color="red"   loading={loading} />
+          <StatCard label="Jobs Created (3M)"   value={overview?.total_jobs_created_3m?.toLocaleString() ?? "—"} icon={<UserCheck size={16} />}  color="green" loading={loading} />
+          <StatCard label="Jobs Lost (3M)"      value={overview?.total_jobs_lost_3m?.toLocaleString() ?? "—"}    icon={<UserMinus size={16} />}  color="red"   loading={loading} />
           <StatCard label="Avg Revenue (3M)"    value={formatMoney(overview?.avg_revenue_3m)}      icon={<BarChart3 size={16} />}  color="blue"  loading={loading} />
           <StatCard label="NPS Promoters"       value={overview?.nps_promoter_pct?.toLocaleString() ?? "—"}    icon={<ThumbsUp size={16} />}   color="green" loading={loading} />
           <StatCard label="NPS Detractors"      value={overview?.nps_detractor_pct?.toLocaleString() ?? "—"}   icon={<ThumbsDown size={16} />} color="red"   loading={loading} />

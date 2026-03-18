@@ -1,11 +1,64 @@
 "use client";
 
+import { useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { apiFetch } from "@/lib/api";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const { session, setRole } = useAuth();
+  const { session } = useAuth();
+  const router = useRouter();
+  const warmupKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!session?.access_token) return;
+
+    const warmupKey = `${session.user_id}:${session.role}`;
+    if (warmupKeyRef.current === warmupKey) return;
+    warmupKeyRef.current = warmupKey;
+
+    const routePrefetches =
+      session.role === "Donor"
+        ? ["/reports"]
+        : ["/portfolio", "/profiles", "/reports", "/advisory"];
+
+    for (const path of routePrefetches) {
+      router.prefetch(path);
+    }
+
+    const warmHeavyData = async () => {
+      const calls =
+        session.role === "Donor"
+          ? [
+              apiFetch("/portfolio/overview", { method: "GET" }, true, { cacheTtlMs: 120000 }),
+              apiFetch("/portfolio/risk-distribution", { method: "GET" }, true, { cacheTtlMs: 120000 }),
+              apiFetch("/portfolio/enterprises", { method: "GET" }, true, { cacheTtlMs: 120000 }),
+            ]
+          : [
+              apiFetch("/portfolio/overview", { method: "GET" }, true, { cacheTtlMs: 120000 }),
+              apiFetch("/portfolio/risk-distribution", { method: "GET" }, true, { cacheTtlMs: 120000 }),
+              apiFetch("/portfolio/by-country", { method: "GET" }, true, { cacheTtlMs: 120000 }),
+              apiFetch("/portfolio/by-sector", { method: "GET" }, true, { cacheTtlMs: 120000 }),
+              apiFetch("/portfolio/trends?months=12", { method: "GET" }, true, { cacheTtlMs: 120000 }),
+              apiFetch("/portfolio/enterprises", { method: "GET" }, true, { cacheTtlMs: 120000 }),
+              apiFetch("/portfolio/loans", { method: "GET" }, true, { cacheTtlMs: 120000 }),
+            ];
+
+      await Promise.allSettled(calls);
+    };
+
+    const run = () => {
+      void warmHeavyData();
+    };
+
+    if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+      (window as any).requestIdleCallback(run, { timeout: 1500 });
+    } else {
+      setTimeout(run, 400);
+    }
+  }, [router, session]);
 
   return (
     <div className="min-h-screen flex">

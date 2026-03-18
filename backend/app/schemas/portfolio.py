@@ -48,6 +48,60 @@ class CountryLoanItem(BaseModel):
     total_outstanding: float
 
 
+class EnterpriseProfileItem(BaseModel):
+    """Enterprise-level prediction snapshot from impact_data."""
+    unique_id: str
+    country_code: Optional[str] = None
+    country_specific: Optional[str] = None
+    business_sector: Optional[str] = None
+    business_sub_sector: Optional[str] = None
+    survey_date: Optional[str] = None
+    risk_tier_3m: Optional[str] = None
+    risk_score_3m: float
+    revenue_3m: float
+    jobs_created_3m: int
+    jobs_lost_3m: int
+    plan_after_program: Optional[str] = None
+
+
+class EnterpriseLoanItem(BaseModel):
+    """Loan records related to an enterprise context."""
+    loannumber: str
+    country_code: str
+    industrysectorofactivity: Optional[str] = None
+    loanstatus: Optional[str] = None
+    disbursedamount: float
+    currentbalance: float
+    daysinarrears: int
+    installmentinarrears: int
+
+
+class EnterpriseInsightItem(BaseModel):
+    """Structured AI-style insight generated from profile metrics."""
+    type: str
+    title: str
+    detail: str
+    severity: str
+    confidence: float
+
+
+class EnterpriseActionItem(BaseModel):
+    """Recommended action plan item for advisors."""
+    priority: str
+    owner: str
+    action: str
+    target_days: int
+
+
+class EnterpriseDetailResponse(BaseModel):
+    """Full enterprise profile detail response."""
+    enterprise: EnterpriseProfileItem
+    related_loans: List[EnterpriseLoanItem]
+    portfolio_context: dict
+    insights: List[EnterpriseInsightItem]
+    actions: List[EnterpriseActionItem]
+
+
 class SegmentResponse(BaseModel):
     """Segment breakdown response."""
     segments: List[SegmentItem]
