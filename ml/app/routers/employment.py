@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 from fastapi import APIRouter, HTTPException
 
+from app.config import HORIZONS
 from app.models import get_registry
 from app.preprocessing import align_features
 from app.schemas import (
@@ -28,7 +29,7 @@ router = APIRouter(prefix="/predict", tags=["employment"])
 async def predict_employment(records: list[dict]):
     """Score one or more records through the employment pipeline.
 
-    Returns per-month predictions for jobs created and jobs lost.
+    Returns per-month predictions for jobs created and jobs lost (1m through 12m).
     """
     if not records:
         raise HTTPException(status_code=422, detail="Empty payload")
@@ -41,22 +42,17 @@ async def predict_employment(records: list[dict]):
 
     jc = {}
     jl = {}
-    for h in [1, 2, 3]:
+    for h in HORIZONS:
         jc[h] = np.maximum(0, reg.employment_jobs_created[h].predict(X))
         jl[h] = np.maximum(0, reg.employment_jobs_lost[h].predict(X))
 
-    items = [
-        EmploymentPredictionItem(
-            unique_id=ids[i],
-            pred_jobs_created_1m=round(float(jc[1][i]), 2),
-            pred_jobs_created_2m=round(float(jc[2][i]), 2),
-            pred_jobs_created_3m=round(float(jc[3][i]), 2),
-            pred_jobs_lost_1m=round(float(jl[1][i]), 2),
-            pred_jobs_lost_2m=round(float(jl[2][i]), 2),
-            pred_jobs_lost_3m=round(float(jl[3][i]), 2),
-        )
-        for i in range(len(df))
-    ]
+    items: list[EmploymentPredictionItem] = []
+    for i in range(len(df)):
+        payload: dict[str, float | str | None] = {"unique_id": ids[i]}
+        for h in HORIZONS:
+            payload[f"pred_jobs_created_{h}m"] = round(float(jc[h][i]), 2)
+            payload[f"pred_jobs_lost_{h}m"] = round(float(jl[h][i]), 2)
+        items.append(EmploymentPredictionItem(**payload))
 
     return EmploymentPredictionResponse(
         meta=PredictionMeta(model_pipeline="employment", record_count=len(items)),

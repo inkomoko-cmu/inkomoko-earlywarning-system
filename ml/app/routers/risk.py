@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 from fastapi import APIRouter, HTTPException
 
-from app.config import RISK_LABELS
+from app.config import HORIZONS, RISK_LABELS
 from app.models import get_registry
 from app.preprocessing import align_features
 from app.schemas import (
@@ -30,8 +30,8 @@ router = APIRouter(prefix="/predict", tags=["risk"])
 async def predict_risk(records: list[dict]):
     """Score one or more client records through the full risk pipeline.
 
-    Returns per-month risk tier and score predictions (1m, 2m, 3m)
-    plus the 3-month tier probabilities.
+    Returns per-month risk tier and score predictions (1m through 12m)
+    plus the max-horizon tier probabilities.
     """
     if not records:
         raise HTTPException(status_code=422, detail="Empty payload")
@@ -45,30 +45,29 @@ async def predict_risk(records: list[dict]):
     # Per-horizon predictions
     scores = {}
     tiers = {}
-    for h in [1, 2, 3]:
+    for h in HORIZONS:
         scores[h] = np.clip(reg.risk_score[h].predict(X), 0, 1)
         tiers[h] = reg.risk_tier[h].predict(X)
 
-    # 3-month tier probabilities (for the main classification)
-    tier_proba_3m = reg.risk_tier[3].predict_proba(X)
+    # Max-horizon tier probabilities (for the main classification)
+    ref_h = max(HORIZONS)
+    tier_proba_ref = reg.risk_tier[ref_h].predict_proba(X)
 
     items: list[RiskPredictionItem] = []
     for i in range(len(df)):
-        items.append(
-            RiskPredictionItem(
-                unique_id=ids[i],
-                pred_risk_tier=RISK_LABELS.get(int(tiers[3][i]), "UNKNOWN"),
-                pred_risk_tier_low_p=round(float(tier_proba_3m[i, 0]), 6),
-                pred_risk_tier_medium_p=round(float(tier_proba_3m[i, 1]), 6),
-                pred_risk_tier_high_p=round(float(tier_proba_3m[i, 2]), 6),
-                pred_risk_score_1m=round(float(scores[1][i]), 6),
-                pred_risk_score_2m=round(float(scores[2][i]), 6),
-                pred_risk_score_3m=round(float(scores[3][i]), 6),
-                pred_risk_tier_1m=RISK_LABELS.get(int(tiers[1][i]), "UNKNOWN"),
-                pred_risk_tier_2m=RISK_LABELS.get(int(tiers[2][i]), "UNKNOWN"),
-                pred_risk_tier_3m=RISK_LABELS.get(int(tiers[3][i]), "UNKNOWN"),
+        payload: dict[str, str | float | None] = {
+            "unique_id": ids[i],
+            "pred_risk_tier": RISK_LABELS.get(int(tiers[ref_h][i]), "UNKNOWN"),
+            "pred_risk_tier_low_p": round(float(tier_proba_ref[i, 0]), 6),
+            "pred_risk_tier_medium_p": round(float(tier_proba_ref[i, 1]), 6),
+            "pred_risk_tier_high_p": round(float(tier_proba_ref[i, 2]), 6),
+        }
+        for h in HORIZONS:
+            payload[f"pred_risk_score_{h}m"] = round(float(scores[h][i]), 6)
+            payload[f"pred_risk_tier_{h}m"] = RISK_LABELS.get(
+                int(tiers[h][i]), "UNKNOWN"
             )
-        )
+        items.append(RiskPredictionItem(**payload))
 
     return RiskPredictionResponse(
         meta=PredictionMeta(model_pipeline="risk", record_count=len(items)),

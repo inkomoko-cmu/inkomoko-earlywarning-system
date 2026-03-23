@@ -8,7 +8,7 @@ from typing import Any
 
 import joblib
 
-from app.config import MODELS_DIR
+from app.config import HORIZONS, MODELS_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -17,8 +17,8 @@ logger = logging.getLogger(__name__)
 class ModelRegistry:
     """Holds all loaded sklearn/LGBM pipelines and exposes their feature lists.
 
-    Each pipeline now stores **per-horizon** models (1m, 2m, 3m).
-    The dict keys are the integer horizon: {1: model, 2: model, 3: model}.
+    Each pipeline stores per-horizon models.
+    The dict keys are integer horizons, for example {1: model, ..., 12: model}.
     """
 
     # ── risk pipeline (per horizon) ─────────────────────────────────────────
@@ -47,14 +47,10 @@ def _load(filename: str) -> Any:
     return joblib.load(path)
 
 
-HORIZONS = [1, 2, 3]
-
-
 def load_models() -> ModelRegistry:
     """Eagerly load every model into memory.  Called once during app lifespan.
 
-    Loads 15 models total: 3 horizons x (risk_tier + risk_score +
-    jobs_created + jobs_lost + revenue).
+    Loads all task models for every configured horizon.
     """
     global _registry
 
@@ -74,16 +70,18 @@ def load_models() -> ModelRegistry:
         # Revenue pipeline (1 regressor per horizon)
         reg.revenue[h] = _load(f"revenue_{h}m_model.joblib")
 
-    # Feature lists from the 3m models (all horizons share the same features)
-    reg.risk_features = list(getattr(reg.risk_tier[3], "feature_names_in_", []))
+    # Feature lists from the max-horizon models (all horizons share the same features)
+    ref_h = max(HORIZONS)
+    reg.risk_features = list(getattr(reg.risk_tier[ref_h], "feature_names_in_", []))
     reg.employment_features = list(
-        getattr(reg.employment_jobs_created[3], "feature_names_in_", [])
+        getattr(reg.employment_jobs_created[ref_h], "feature_names_in_", [])
     )
-    reg.revenue_features = list(getattr(reg.revenue[3], "feature_names_in_", []))
+    reg.revenue_features = list(getattr(reg.revenue[ref_h], "feature_names_in_", []))
 
     _registry = reg
     logger.info(
-        "All models loaded (15 total) — risk(%d feats), employment(%d feats), revenue(%d feats)",
+        "All models loaded (%d horizons) — risk(%d feats), employment(%d feats), revenue(%d feats)",
+        len(HORIZONS),
         len(reg.risk_features),
         len(reg.employment_features),
         len(reg.revenue_features),
