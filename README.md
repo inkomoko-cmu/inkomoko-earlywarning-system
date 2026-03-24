@@ -1,5 +1,3 @@
-
-
 <a name="readme-top"></a>
 
 <div align="center">
@@ -15,25 +13,25 @@
 
 # 📗 Table of Contents
 
-* [📖 About the Project](#about-project)
+- [📖 About the Project](#about-project)
+  - [🎯 Project Goals](#project-goals)
+  - [🧠 System Overview](#system-overview)
 
-  * [🎯 Project Goals](#project-goals)
-  * [🧠 System Overview](#system-overview)
-* [🛠 Built With](#built-with)
+- [🛠 Built With](#built-with)
+  - [Tech Stack](#tech-stack)
+  - [Key Features](#key-features)
 
-  * [Tech Stack](#tech-stack)
-  * [Key Features](#key-features)
-* [🏗 Architecture & Development Strategy](#architecture)
-* [💻 Getting Started](#getting-started)
+- [🏗 Architecture & Development Strategy](#architecture)
+- [💻 Getting Started](#getting-started)
+  - [Prerequisites](#prerequisites)
+  - [Setup](#setup)
+  - [Install](#install)
+  - [Usage](#usage)
 
-  * [Prerequisites](#prerequisites)
-  * [Setup](#setup)
-  * [Install](#install)
-  * [Usage](#usage)
-* [👥 Authors](#authors)
-* [🔭 Future Features](#future-features)
-* [🤝 Contributing](#contributing)
-* [📝 License](#license)
+- [👥 Authors](#authors)
+- [🔭 Future Features](#future-features)
+- [🤝 Contributing](#contributing)
+- [📝 License](#license)
 
 ---
 
@@ -47,11 +45,11 @@ The system combines **impact measurement**, **predictive risk modeling**, and **
 
 ## 🎯 Project Goals <a name="project-goals"></a>
 
-* Track key impact indicators such as income growth, business survival, job creation, and access to finance
-* Predict enterprise-level distress or default with early warning lead time
-* Support program teams in prioritizing interventions
-* Enable organizational learning through portfolio-level analytics
-* Provide a scalable and interpretable AI solution suitable for fragile contexts
+- Track key impact indicators such as income growth, business survival, job creation, and access to finance
+- Predict enterprise-level distress or default with early warning lead time
+- Support program teams in prioritizing interventions
+- Enable organizational learning through portfolio-level analytics
+- Provide a scalable and interpretable AI solution suitable for fragile contexts
 
 ---
 
@@ -59,10 +57,17 @@ The system combines **impact measurement**, **predictive risk modeling**, and **
 
 The platform consists of:
 
-* A **Flask-based backend** for data access, feature processing, and model inference
-* A **Next.js + Tailwind CSS frontend** for dashboards and role-based user interaction
-* **Machine learning models** trained concurrently with UI/API development
-* A modular design allowing dummy data to be replaced seamlessly with real data
+- A **FastAPI-based backend** for authentication, scoped data access, feature processing, and model inference
+- A **Next.js + Tailwind CSS frontend** for dashboards and role-based user interaction
+- **Machine learning models** trained concurrently with UI/API development
+- A modular design allowing dummy data to be replaced seamlessly with real data
+
+The executive overview dashboard now includes richer analytics contracts for:
+
+- country comparison,
+- sector-risk summary,
+- anomaly signals,
+- confidence-aware trends.
 
 ---
 
@@ -82,7 +87,7 @@ The platform consists of:
 <details>
   <summary><b>Backend</b></summary>
   <ul>
-    <li><a href="https://flask.palletsprojects.com/">Flask</a></li>
+    <li><a href="https://fastapi.tiangolo.com/">FastAPI</a></li>
     <li>RESTful APIs for inference and data access</li>
   </ul>
 </details>
@@ -108,13 +113,13 @@ The platform consists of:
 
 ## Key Features <a name="key-features"></a>
 
-* **Role-based dashboards** (Admin, Program, Field, Finance, Donor)
-* **Enterprise risk scoring** with early warning flags
-* **Impact KPIs** across income, jobs, survival, and finance
-* **Portfolio-level trend analysis**
-* **Scenario simulation** for macroeconomic shocks
-* **End-to-end prototype** using dummy data
-* **Clear separation** between UI, API, and ML layers
+- **Role-based dashboards** (Admin, Program, Field, Finance, Donor)
+- **Enterprise risk scoring** with early warning flags
+- **Impact KPIs** across income, jobs, survival, and finance
+- **Portfolio-level trend analysis**
+- **Scenario simulation** for macroeconomic shocks
+- **End-to-end prototype** using dummy data
+- **Clear separation** between UI, API, and ML layers
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -124,17 +129,17 @@ The platform consists of:
 
 To ensure timely delivery and reduce integration risk, the project follows a **parallel development approach**:
 
-* **Model development** (feature engineering, baseline models, evaluation)
-* **Backend API development** (Flask inference endpoints)
-* **Frontend dashboard development** (Next.js UI with dummy data)
+- **Model development** (feature engineering, baseline models, evaluation)
+- **Backend API development** (Flask inference endpoints)
+- **Frontend dashboard development** (Next.js UI with dummy data)
 
 These components are developed **concurrently**, with final stages focused on **integration**, validation, and refinement.
 
 This approach ensures:
 
-* Early visualization of expected outputs
-* Clear contracts between data, models, and UI
-* Faster iteration and reduced last-stage risk
+- Early visualization of expected outputs
+- Clear contracts between data, models, and UI
+- Faster iteration and reduced last-stage risk
 
 ---
 
@@ -142,10 +147,10 @@ This approach ensures:
 
 ## Prerequisites
 
-* Node.js (v18+ recommended)
-* Python 3.9+
-* npm or yarn
-* Git
+- Node.js (v18+ recommended)
+- Python 3.9+
+- npm or yarn
+- Git
 
 ---
 
@@ -182,11 +187,11 @@ pip install -r requirements.txt
 
 ## Usage
 
-### Run Backend (Flask)
+### Run Backend (FastAPI)
 
 ```sh
 cd backend
-flask run
+uvicorn app.main:app --reload --port 8000
 ```
 
 ### Run Frontend (Next.js)
@@ -199,29 +204,50 @@ npm run dev
 Open your browser at:
 👉 `http://localhost:3000`
 
+### One-off anonymized CSV upload to PostgreSQL
+
+Run this from project root when you want to load anonymized source CSVs into raw Postgres tables:
+
+```sh
+pip install -r backend/requirements.txt
+DATABASE_URL="postgresql://postgres:<password>@localhost:5432/inkomoko_early_warning" python upload_anonymized_data.py
+```
+
+Optional dry run (no DB writes):
+
+```sh
+python upload_anonymized_data.py --dry-run
+```
+
+This creates/loads these tables:
+
+- `anon_baseline_raw`
+- `anon_endline_raw`
+- `anon_investment_raw`
+
 ---
 
 # 👥 Authors <a name="authors"></a>
 
 👤 **Samuel Wanza**
 
-* GitHub: [Samuelwanza](https://github.com/Samuelwanza)
-* LinkedIn: [https://www.linkedin.com/in/samuel-munguti/](https://www.linkedin.com/in/samuel-munguti/)
+- GitHub: [Samuelwanza](https://github.com/Samuelwanza)
+- LinkedIn: [https://www.linkedin.com/in/samuel-munguti/](https://www.linkedin.com/in/samuel-munguti/)
 
 👤 **Violette Uwamungu**
 
-* GitHub: [VioletteUwamungu](https://github.com/VioletteUwamungu)
-* LinkedIn: [https://www.linkedin.com/in/violette-uwamungu-74b4bb184/](https://www.linkedin.com/in/violette-uwamungu-74b4bb184/)
+- GitHub: [VioletteUwamungu](https://github.com/VioletteUwamungu)
+- LinkedIn: [https://www.linkedin.com/in/violette-uwamungu-74b4bb184/](https://www.linkedin.com/in/violette-uwamungu-74b4bb184/)
 
 👤 **Candide Giramata Muhoracyeye**
 
-* GitHub: [GiramataC](https://github.com/GiramataC)
-* LinkedIn: [https://www.linkedin.com/in/giramata-muhoracyeye-candide-a75ab9231/](https://www.linkedin.com/in/giramata-muhoracyeye-candide-a75ab9231/)
+- GitHub: [GiramataC](https://github.com/GiramataC)
+- LinkedIn: [https://www.linkedin.com/in/giramata-muhoracyeye-candide-a75ab9231/](https://www.linkedin.com/in/giramata-muhoracyeye-candide-a75ab9231/)
 
 👤 **Matia Mulumba Mukasa**
 
-* GitHub: [tr3p0l3m](https://github.com/tr3p0l3m)
-* LinkedIn: [https://www.linkedin.com/in/matiamulumbamukasa/](https://www.linkedin.com/in/matiamulumbamukasa/)
+- GitHub: [tr3p0l3m](https://github.com/tr3p0l3m)
+- LinkedIn: [https://www.linkedin.com/in/matiamulumbamukasa/](https://www.linkedin.com/in/matiamulumbamukasa/)
 
 Faculty Advisor: **Dr. George Okeyo**, CMU Africa
 
@@ -231,11 +257,11 @@ Faculty Advisor: **Dr. George Okeyo**, CMU Africa
 
 # 🔭 Future Features <a name="future-features"></a>
 
-* Integration with live Inkomoko data systems
-* Automated retraining pipelines
-* Explainability dashboards (SHAP-style summaries)
-* Donor-facing reporting exports
-* Multi-country comparative analytics
+- Integration with live Inkomoko data systems
+- Automated retraining pipelines
+- Explainability dashboards (SHAP-style summaries)
+- Donor-facing reporting exports
+- Multi-country comparative analytics
 
 ---
 
@@ -249,4 +275,3 @@ Please ensure alignment with ethical data use and project scope.
 # 📝 License <a name="license"></a>
 
 This project is licensed under the **MIT License**.
-

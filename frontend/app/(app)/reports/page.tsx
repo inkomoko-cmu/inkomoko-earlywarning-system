@@ -1,11 +1,28 @@
 "use client";
 
-import { useState, useCallback, type ReactNode } from "react";
+import { useState, useEffect, useCallback, useMemo, type ReactNode } from "react";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { exportPDF } from "@/lib/export";
+import { InsightPanel } from "@/components/ui/InsightPanel";
+import { exportDonorPackPDF, exportPDF } from "@/lib/export";
 import { apiFetch } from "@/lib/api";
+import { type AiInsight, clampConfidence } from "@/lib/insights";
+import {
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  Tooltip,
+  LineChart,
+  Line,
+  BarChart as ReBarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Legend,
+} from "recharts";
 import {
   FileText,
   Download,
@@ -24,8 +41,7 @@ import { RequireRole } from "@/components/auth/RequireRole";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 type RiskTier = "HIGH" | "MEDIUM" | "LOW";
-type ReportType = "donor_pack" | "program_brief";
-type DataSource = "live" | "demo";
+type ReportType = "donor_pack" | "program_brief" | "risk_intervention" | "livelihood_impact";
 
 type HorizonData = {
   avg_risk_score: number;
@@ -353,19 +369,36 @@ async function buildReportFromPortfolio(reportType: ReportType): Promise<ReportD
   const highPct = total ? ((tierDistribution.HIGH ?? 0) / total) * 100 : 0;
   const lowPct = total ? ((tierDistribution.LOW ?? 0) / total) * 100 : 0;
 
+  const reportMeta: Record<ReportType, { title: string; subtitle: string; summary: string }> = {
+    donor_pack: {
+      title: "Donor Impact Report",
+      subtitle: "Inkomoko Early Warning System — Portfolio Impact Assessment",
+      summary: `The portfolio covers ${total.toLocaleString()} enterprises with projected 3-month revenue of ${fmt(totalRevenue, "RWF ")} and net jobs impact of ${fmt(totalCreated - totalLost)}. ${Math.round(highPct)}% are high-risk and ${Math.round(lowPct)}% are low-risk; interventions are prioritized by tier and arrears pressure. ${trendNarrative}`,
+    },
+    program_brief: {
+      title: "Program Brief",
+      subtitle: "Inkomoko Early Warning System — Executive Program Summary",
+      summary: `This brief summarizes ${total.toLocaleString()} enterprises with average risk ${pct(avgRisk)} and projected 3-month revenue ${fmt(totalRevenue, "RWF ")}. High-risk concentration is ${Math.round(highPct)}%, with net jobs impact ${fmt(totalCreated - totalLost)}. ${trendNarrative}`,
+    },
+    risk_intervention: {
+      title: "Risk Intervention Report",
+      subtitle: "Early Warning System — Prioritized Risk Mitigation Queue",
+      summary: `High-risk concentration is ${Math.round(highPct)}% (${fmt(tierDistribution.HIGH ?? 0)} enterprises). The watchlist highlights profiles requiring immediate intervention, while sector and country distributions indicate where mitigation resources should be focused first. ${trendNarrative}`,
+    },
+    livelihood_impact: {
+      title: "Livelihood Impact Report",
+      subtitle: "Early Warning System — Jobs and Income Protection Outlook",
+      summary: `Projected 3-month revenue is ${fmt(totalRevenue, "RWF ")} with total jobs created ${fmt(totalCreated)} and net jobs impact ${fmt(totalCreated - totalLost)}. Sector and country views indicate where support can maximize livelihoods while containing risk. ${trendNarrative}`,
+    },
+  };
+
   const shared: ReportData = {
     report_type: reportType,
     generated_at: new Date().toISOString(),
     source: failures > 0 ? `Live portfolio API (partial: ${failures} source${failures > 1 ? "s" : ""} unavailable)` : "Live portfolio API",
-    title: reportType === "donor_pack" ? "Donor Impact Report" : "Program Brief",
-    subtitle:
-      reportType === "donor_pack"
-        ? "Inkomoko Early Warning System — Portfolio Impact Assessment"
-        : "Inkomoko Early Warning System — Executive Program Summary",
-    executive_summary:
-      reportType === "donor_pack"
-        ? `The portfolio covers ${total.toLocaleString()} enterprises with projected 3-month revenue of ${fmt(totalRevenue, "RWF ")} and net jobs impact of ${fmt(totalCreated - totalLost)}. ${Math.round(highPct)}% are high-risk and ${Math.round(lowPct)}% are low-risk; interventions are prioritized by tier and arrears pressure. ${trendNarrative}`
-        : `This brief summarizes ${total.toLocaleString()} enterprises with average risk ${pct(avgRisk)} and projected 3-month revenue ${fmt(totalRevenue, "RWF ")}. High-risk concentration is ${Math.round(highPct)}%, with net jobs impact ${fmt(totalCreated - totalLost)}. ${trendNarrative}`,
+    title: reportMeta[reportType].title,
+    subtitle: reportMeta[reportType].subtitle,
+    executive_summary: reportMeta[reportType].summary,
     kpis: {
       total_enterprises: total,
       avg_risk_score: avgRisk,
@@ -548,12 +581,57 @@ function DonorPackReport({ d }: { d: ReportData }) {
   const k = d.kpis ?? ({} as ReportKPIs);
   const hs = d.horizon_summary ?? {};
   const tierDist = k.tier_distribution ?? {};
-  const total = k.total_enterprises ?? 1;
+  const total = Math.max(1, k.total_enterprises ?? 1);
+
+  const high = tierDist.HIGH ?? 0;
+  const medium = tierDist.MEDIUM ?? 0;
+  const low = tierDist.LOW ?? 0;
+  const highShare = (high / total) * 100;
+
+  const riskPie = [
+    { name: "High", value: high, fill: "#dc2626" },
+    { name: "Medium", value: medium, fill: "#f59e0b" },
+    { name: "Low", value: low, fill: "#10b981" },
+  ];
+
+  const horizonSeries = ["1", "2", "3"].map((h) => ({
+    horizon: h === "1" ? "1M" : h === "2" ? "2M" : "3M",
+    revenue: hs[h]?.total_revenue ?? 0,
+    netJobs: hs[h]?.net_jobs ?? 0,
+    avgRiskScore: (hs[h]?.avg_risk_score ?? 0) * 100,
+  }));
+
+  const sectorTop = [...(d.sector_breakdown ?? [])]
+    .sort((a, b) => b.total_revenue - a.total_revenue)
+    .slice(0, 8)
+    .map((s) => ({
+      name: s.sector || "Unknown",
+      revenue: s.total_revenue,
+      highRisk: s.high_risk,
+      enterprises: s.count,
+    }));
+
+  const countryTop = [...(d.country_breakdown ?? [])]
+    .sort((a, b) => b.total_revenue - a.total_revenue)
+    .slice(0, 8)
+    .map((c) => ({
+      name: c.country || "Unknown",
+      revenue: c.total_revenue,
+      highRisk: c.high_risk,
+      enterprises: c.count,
+    }));
+
+  const takeaways = [
+    `Coverage reaches ${fmt(k.total_enterprises)} enterprises with projected 3-month revenue of ${fmt(k.total_projected_revenue, "RWF ")}.`,
+    `${highShare.toFixed(1)}% of the portfolio is high-risk, signaling where donor-backed safeguards should be prioritized.`,
+    `Net livelihood effect is ${fmt(k.net_jobs)} jobs, balancing resilience support and risk mitigation.` +
+      (d.action_items?.length ? ` ${d.action_items[0]?.priority} priority action is already identified.` : ""),
+  ];
 
   return (
     <div className="space-y-4 mt-4">
       {/* Banner */}
-      <div className="rounded-2xl bg-gradient-to-r from-inkomoko-blue to-blue-700 text-white p-6">
+      <div className="rounded-2xl bg-gradient-to-r from-inkomoko-blue via-[#165b99] to-[#2f7abf] text-white p-6 shadow-card">
         <h2 className="text-xl font-bold">{d.title}</h2>
         <p className="text-blue-100 text-sm mt-1">{d.subtitle}</p>
         <p className="text-blue-200 text-xs mt-2">
@@ -561,51 +639,136 @@ function DonorPackReport({ d }: { d: ReportData }) {
         </p>
       </div>
 
-      {/* Executive Summary */}
+      {/* Executive Summary + Takeaways */}
       <Card>
         <CardContent className="pt-5">
           <SectionHeader icon={<FileText size={16} />} title="Executive Summary" />
           <p className="text-sm text-inkomoko-text leading-relaxed border-l-4 border-inkomoko-blue pl-4 py-1 bg-blue-50/40 rounded-r-lg">
             {d.executive_summary}
           </p>
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            {takeaways.map((item, idx) => (
+              <div key={idx} className="rounded-xl border border-inkomoko-border bg-white p-3">
+                <div className="text-xs uppercase tracking-wide text-inkomoko-muted">Takeaway {idx + 1}</div>
+                <p className="mt-1 text-sm text-inkomoko-text leading-relaxed">{item}</p>
+              </div>
+            ))}
+          </div>
         </CardContent>
       </Card>
 
       {/* KPI Dashboard */}
       <Card>
         <CardContent className="pt-5">
-          <SectionHeader icon={<BarChart3 size={16} />} title="Key Performance Indicators" />
+          <SectionHeader icon={<BarChart3 size={16} />} title="Donor KPI Dashboard" />
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
             <KpiCard value={fmt(k.total_enterprises)} label="Enterprises Monitored" color="blue" />
             <KpiCard value={fmt(k.total_projected_revenue, "RWF ")} label="Projected Revenue (3m)" color="green" />
-            <KpiCard value={fmt(k.total_jobs_created)} label="Jobs Safeguarded" color="green" />
+            <KpiCard value={fmt(k.total_jobs_created)} label="Jobs Created" color="green" />
+            <KpiCard value={fmt(k.net_jobs)} label="Net Jobs" color="neutral" />
             <KpiCard value={String(k.high_risk_count ?? "—")} label="High-Risk Enterprises" color="red" />
-            <KpiCard value={String(k.medium_risk_count ?? "—")} label="Medium-Risk" color="amber" />
-            <KpiCard value={String(k.low_risk_count ?? "—")} label="Low-Risk (Resilient)" color="green" />
+            <KpiCard value={pct(k.avg_risk_score)} label="Avg Risk Score" color="amber" />
           </div>
         </CardContent>
       </Card>
 
-      {/* Risk Distribution */}
+      {/* Core Charts */}
       <Card>
         <CardContent className="pt-5">
-          <SectionHeader icon={<Shield size={16} />} title="Risk Distribution" />
-          {(["LOW", "MEDIUM", "HIGH"] as RiskTier[]).map((tier) => (
-            <BarRow
-              key={tier}
-              label={<TierBadge tier={tier} />}
-              count={tierDist[tier] ?? 0}
-              total={total}
-              color={tier === "HIGH" ? "bg-red-500" : tier === "MEDIUM" ? "bg-amber-400" : "bg-emerald-500"}
-            />
-          ))}
+          <SectionHeader icon={<Shield size={16} />} title="Risk and Horizon Graphics" />
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <div className="rounded-xl border border-inkomoko-border bg-white p-3">
+              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-inkomoko-muted">Risk mix</div>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={riskPie}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={58}
+                      outerRadius={92}
+                      paddingAngle={3}
+                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    >
+                      {riskPie.map((entry) => (
+                        <Cell key={entry.name} fill={entry.fill} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(val: number) => fmt(val)} />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+            <div className="rounded-xl border border-inkomoko-border bg-white p-3">
+              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-inkomoko-muted">3-step horizon trend</div>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={horizonSeries}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <XAxis dataKey="horizon" />
+                    <YAxis yAxisId="left" tickFormatter={(v) => fmt(v as number, "RWF ")} />
+                    <YAxis yAxisId="right" orientation="right" />
+                    <Tooltip />
+                    <Legend />
+                    <Line yAxisId="left" type="monotone" dataKey="revenue" stroke="#0b2e5b" strokeWidth={2.5} name="Revenue" />
+                    <Line yAxisId="right" type="monotone" dataKey="netJobs" stroke="#059669" strokeWidth={2.5} name="Net Jobs" />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
-      {/* Revenue Projections by Horizon */}
+      {/* Opportunity Maps */}
       <Card>
         <CardContent className="pt-5">
-          <SectionHeader icon={<TrendingUp size={16} />} title="Revenue Projections by Horizon" />
+          <SectionHeader icon={<TrendingUp size={16} />} title="Sector and Country Opportunity" />
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            <div className="rounded-xl border border-inkomoko-border bg-white p-3">
+              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-inkomoko-muted">Top sectors by projected revenue</div>
+              <div className="h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ReBarChart data={sectorTop}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <XAxis dataKey="name" angle={-25} textAnchor="end" height={70} interval={0} tick={{ fontSize: 11 }} />
+                    <YAxis tickFormatter={(v) => fmt(v as number)} />
+                    <Tooltip formatter={(v: number, key) => (key === "revenue" ? fmt(v, "RWF ") : fmt(v))} />
+                    <Legend />
+                    <Bar dataKey="revenue" fill="#0b2e5b" name="Revenue" radius={[6, 6, 0, 0]} />
+                    <Bar dataKey="highRisk" fill="#dc2626" name="High Risk" radius={[6, 6, 0, 0]} />
+                  </ReBarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+            <div className="rounded-xl border border-inkomoko-border bg-white p-3">
+              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-inkomoko-muted">Top countries by projected revenue</div>
+              <div className="h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ReBarChart data={countryTop}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <XAxis dataKey="name" angle={-20} textAnchor="end" height={62} interval={0} tick={{ fontSize: 11 }} />
+                    <YAxis tickFormatter={(v) => fmt(v as number)} />
+                    <Tooltip formatter={(v: number, key) => (key === "revenue" ? fmt(v, "RWF ") : fmt(v))} />
+                    <Legend />
+                    <Bar dataKey="revenue" fill="#165b99" name="Revenue" radius={[6, 6, 0, 0]} />
+                    <Bar dataKey="highRisk" fill="#f59e0b" name="High Risk" radius={[6, 6, 0, 0]} />
+                  </ReBarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Horizon Cards */}
+      <Card>
+        <CardContent className="pt-5">
+          <SectionHeader icon={<TrendingUp size={16} />} title="Detailed Horizon Snapshot" />
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {["1", "2", "3"].map((h) => (
               <HorizonCard
@@ -690,6 +853,16 @@ function DonorPackReport({ d }: { d: ReportData }) {
           </CardContent>
         </Card>
       )}
+      {(!d.gender_breakdown || Object.keys(d.gender_breakdown).length === 0) && (
+        <Card>
+          <CardContent className="pt-5">
+            <SectionHeader icon={<Users size={16} />} title="Gender Lens Analysis" />
+            <div className="rounded-xl border border-inkomoko-border bg-inkomoko-bg/40 p-4 text-sm text-inkomoko-muted">
+              Gender-disaggregated metrics are unavailable in this data source. The donor export flags this as a data completeness gap.
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Programme Performance */}
       {d.program_breakdown?.length > 0 && (
@@ -707,6 +880,16 @@ function DonorPackReport({ d }: { d: ReportData }) {
                 fmt(p.total_jobs_created),
               ])}
             />
+          </CardContent>
+        </Card>
+      )}
+      {(!d.program_breakdown || d.program_breakdown.length === 0) && (
+        <Card>
+          <CardContent className="pt-5">
+            <SectionHeader icon={<CheckSquare size={16} />} title="Programme Performance" />
+            <div className="rounded-xl border border-inkomoko-border bg-inkomoko-bg/40 p-4 text-sm text-inkomoko-muted">
+              Programme-level segmentation is unavailable in this source. Funding recommendations are therefore portfolio-level.
+            </div>
           </CardContent>
         </Card>
       )}
@@ -764,6 +947,9 @@ function DonorPackReport({ d }: { d: ReportData }) {
             indicators, business characteristics, and lagged variables. All monetary values are in Rwandan
             Francs (RWF) unless stated otherwise. Risk scores are probability-calibrated between 0 and 1.
           </p>
+          <div className="mt-3 text-xs text-inkomoko-muted">
+            Donor note: where segment fields are missing in live portfolio mode, this report explicitly marks those sections as unavailable.
+          </div>
         </CardContent>
       </Card>
     </div>
@@ -892,46 +1078,293 @@ function ProgramBriefReport({ d }: { d: ReportData }) {
   );
 }
 
+function RiskInterventionReport({ d }: { d: ReportData }) {
+  const k = d.kpis ?? ({} as ReportKPIs);
+  const total = Math.max(1, k.total_enterprises ?? 1);
+  const hs = d.horizon_summary ?? {};
+  const topSectorRisk = [...(d.sector_breakdown ?? [])]
+    .sort((a, b) => b.high_risk - a.high_risk)
+    .slice(0, 8)
+    .map((s) => ({
+      name: s.sector || "Unknown",
+      highRisk: s.high_risk,
+      enterprises: s.count,
+    }));
+  const topCountryRisk = [...(d.country_breakdown ?? [])]
+    .sort((a, b) => b.high_risk - a.high_risk)
+    .slice(0, 8)
+    .map((c) => ({
+      name: c.country || "Unknown",
+      highRisk: c.high_risk,
+      enterprises: c.count,
+    }));
+
+  return (
+    <div className="space-y-4 mt-4">
+      <div className="rounded-2xl bg-gradient-to-r from-red-700 via-red-600 to-orange-600 text-white p-6 shadow-card">
+        <h2 className="text-xl font-bold">{d.title}</h2>
+        <p className="text-red-100 text-sm mt-1">{d.subtitle}</p>
+        <p className="text-red-200 text-xs mt-2">Generated: {new Date(d.generated_at).toLocaleString()} — Source: {d.source}</p>
+      </div>
+
+      <Card>
+        <CardContent className="pt-5">
+          <SectionHeader icon={<Shield size={16} />} title="Risk Escalation Snapshot" />
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <KpiCard value={fmt(k.high_risk_count)} label="High Risk" color="red" />
+            <KpiCard value={fmt(k.medium_risk_count)} label="Medium Risk" color="amber" />
+            <KpiCard value={pct((k.high_risk_count ?? 0) / total)} label="High-Risk Share" color="red" />
+            <KpiCard value={pct(hs["3"]?.avg_risk_score)} label="Avg Risk (3m)" color="neutral" />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="pt-5">
+          <SectionHeader icon={<BarChart3 size={16} />} title="Risk Hotspots" />
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            <div className="rounded-xl border border-inkomoko-border bg-white p-3">
+              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-inkomoko-muted">Sectors with highest risk burden</div>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ReBarChart data={topSectorRisk}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <XAxis dataKey="name" angle={-20} textAnchor="end" height={62} interval={0} tick={{ fontSize: 11 }} />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="highRisk" fill="#dc2626" name="High Risk" radius={[6, 6, 0, 0]} />
+                    <Bar dataKey="enterprises" fill="#f59e0b" name="Total Enterprises" radius={[6, 6, 0, 0]} />
+                  </ReBarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+            <div className="rounded-xl border border-inkomoko-border bg-white p-3">
+              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-inkomoko-muted">Countries with highest risk burden</div>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ReBarChart data={topCountryRisk}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <XAxis dataKey="name" angle={-20} textAnchor="end" height={62} interval={0} tick={{ fontSize: 11 }} />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="highRisk" fill="#b91c1c" name="High Risk" radius={[6, 6, 0, 0]} />
+                    <Bar dataKey="enterprises" fill="#fb923c" name="Total Enterprises" radius={[6, 6, 0, 0]} />
+                  </ReBarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="pt-5">
+          <SectionHeader icon={<Eye size={16} />} title="Intervention Watchlist" />
+          <RptTable
+            headers={["Enterprise", "Sector", "Country", "Risk Score", "Tier", "Revenue (3m)"]}
+            rows={d.top_risk_enterprises.map((r) => [
+              <strong key="n">{r.unique_id}</strong>,
+              r.sector,
+              r.country,
+              pct(r.risk_score),
+              <TierBadge key="t" tier={r.risk_tier} />,
+              fmt(r.revenue_3m, "RWF "),
+            ])}
+          />
+        </CardContent>
+      </Card>
+
+      {d.action_items && d.action_items.length > 0 && (
+        <Card>
+          <CardContent className="pt-5">
+            <SectionHeader icon={<CheckSquare size={16} />} title="Recommended Risk Actions" />
+            <div className="space-y-2">
+              {d.action_items.map((a, i) => (
+                <div key={i} className="flex items-start gap-3 p-3 rounded-xl border border-inkomoko-border bg-inkomoko-bg/40">
+                  <PriorityBadge priority={a.priority} />
+                  <div className="flex-1">
+                    <div className="text-sm font-medium text-inkomoko-text">{a.action}</div>
+                    <div className="text-xs text-inkomoko-muted mt-0.5">⏰ {a.deadline}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+function LivelihoodImpactReport({ d }: { d: ReportData }) {
+  const k = d.kpis ?? ({} as ReportKPIs);
+  const hs = d.horizon_summary ?? {};
+  const horizonSeries = ["1", "2", "3"].map((h) => ({
+    horizon: h === "1" ? "1M" : h === "2" ? "2M" : "3M",
+    revenue: hs[h]?.total_revenue ?? 0,
+    netJobs: hs[h]?.net_jobs ?? 0,
+    jobsCreated: hs[h]?.jobs_created ?? 0,
+  }));
+  const sectorJobs = [...(d.sector_breakdown ?? [])]
+    .sort((a, b) => b.total_jobs_created - a.total_jobs_created)
+    .slice(0, 8)
+    .map((s) => ({
+      name: s.sector || "Unknown",
+      jobs: s.total_jobs_created,
+      revenue: s.total_revenue,
+    }));
+
+  return (
+    <div className="space-y-4 mt-4">
+      <div className="rounded-2xl bg-gradient-to-r from-emerald-700 via-teal-600 to-cyan-600 text-white p-6 shadow-card">
+        <h2 className="text-xl font-bold">{d.title}</h2>
+        <p className="text-emerald-100 text-sm mt-1">{d.subtitle}</p>
+        <p className="text-emerald-200 text-xs mt-2">Generated: {new Date(d.generated_at).toLocaleString()} — Source: {d.source}</p>
+      </div>
+
+      <Card>
+        <CardContent className="pt-5">
+          <SectionHeader icon={<Users size={16} />} title="Livelihood Outcome Snapshot" />
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <KpiCard value={fmt(k.total_jobs_created)} label="Jobs Created" color="green" />
+            <KpiCard value={fmt(k.net_jobs)} label="Net Jobs" color="neutral" />
+            <KpiCard value={fmt(k.total_projected_revenue, "RWF ")} label="Revenue (3m)" color="blue" />
+            <KpiCard value={fmt(k.total_enterprises)} label="Enterprises Covered" color="blue" />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="pt-5">
+          <SectionHeader icon={<TrendingUp size={16} />} title="Revenue and Jobs Trajectory" />
+          <div className="h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={horizonSeries}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis dataKey="horizon" />
+                <YAxis yAxisId="left" tickFormatter={(v) => fmt(v as number)} />
+                <YAxis yAxisId="right" orientation="right" tickFormatter={(v) => fmt(v as number)} />
+                <Tooltip />
+                <Legend />
+                <Line yAxisId="left" type="monotone" dataKey="revenue" stroke="#0b2e5b" strokeWidth={2.5} name="Revenue" />
+                <Line yAxisId="right" type="monotone" dataKey="jobsCreated" stroke="#059669" strokeWidth={2.5} name="Jobs Created" />
+                <Line yAxisId="right" type="monotone" dataKey="netJobs" stroke="#16a34a" strokeWidth={2.5} name="Net Jobs" />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </CardContent>
+      </Card>
+
+      {sectorJobs.length > 0 && (
+        <Card>
+          <CardContent className="pt-5">
+            <SectionHeader icon={<BarChart3 size={16} />} title="Sector Livelihood Contribution" />
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <ReBarChart data={sectorJobs}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <XAxis dataKey="name" angle={-20} textAnchor="end" height={62} interval={0} tick={{ fontSize: 11 }} />
+                  <YAxis />
+                  <Tooltip formatter={(v: number, key) => (key === "revenue" ? fmt(v, "RWF ") : fmt(v))} />
+                  <Legend />
+                  <Bar dataKey="jobs" fill="#059669" name="Jobs Created" radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="revenue" fill="#0b2e5b" name="Revenue" radius={[6, 6, 0, 0]} />
+                </ReBarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {d.success_stories?.length > 0 && (
+        <Card>
+          <CardContent className="pt-5">
+            <SectionHeader icon={<Star size={16} />} title="Livelihood Resilience Spotlight" />
+            <RptTable
+              headers={["Enterprise", "Sector", "Country", "Risk Score", "Revenue (3m)", "Jobs Created"]}
+              rows={d.success_stories.map((s) => [
+                <strong key="n">{s.unique_id}</strong>,
+                s.sector,
+                s.country,
+                pct(s.risk_score),
+                fmt(s.revenue_3m, "RWF "),
+                fmt(s.jobs_created_3m),
+              ])}
+            />
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 // ── Main Page ──────────────────────────────────────────────────────────────
 export default function ReportsPage() {
   const [reportType, setReportType] = useState<ReportType>("donor_pack");
-  const [dataSource, setDataSource] = useState<DataSource>("stored");
   const [report, setReport] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [liveInsights, setLiveInsights] = useState<AiInsight[] | null>(null);
+  const [aiStatus, setAiStatus] = useState<string>("idle");
+  const [aiJobId, setAiJobId] = useState<string | null>(null);
+  const [aiLastUpdated, setAiLastUpdated] = useState<string | null>(null);
 
   const generateReport = useCallback(async () => {
     setLoading(true);
     setError(null);
     setReport(null);
     try {
-      let data: ReportData;
-      if (dataSource === "demo") {
-        try {
-          data = await apiFetch<ReportData>(
-            `/demo/reports?report_type=${reportType}&source=test`,
-            { method: "GET" },
-            false,
-            { cacheTtlMs: 60000 }
-          );
-        } catch {
-          data = await buildReportFromPortfolio(reportType);
-          setError("Demo endpoint unavailable. Generated a live portfolio report instead.");
-        }
-      } else {
-        data = await buildReportFromPortfolio(reportType);
-      }
+      const data = await buildReportFromPortfolio(reportType);
       setReport(data);
     } catch (e: unknown) {
       setError((e as Error)?.message ?? "Failed to generate report.");
     } finally {
       setLoading(false);
     }
-  }, [reportType, dataSource]);
+  }, [reportType]);
 
   const handleExportPDF = () => {
     if (!report) return;
     const k = report.kpis ?? ({} as ReportKPIs);
+
+    if (report.report_type === "donor_pack") {
+      const hs = report.horizon_summary ?? {};
+      const total = Math.max(1, k.total_enterprises ?? 1);
+      const highPct = ((k.high_risk_count ?? 0) / total) * 100;
+      const takeaways = [
+        `Coverage includes ${fmt(k.total_enterprises)} enterprises with projected revenue of ${fmt(k.total_projected_revenue, "RWF ")}.`,
+        `${highPct.toFixed(1)}% of enterprises are high-risk and should receive prioritized support.`,
+        `Net jobs impact is ${fmt(k.net_jobs)} with ${fmt(k.total_jobs_created)} jobs created.`,
+      ];
+
+      exportDonorPackPDF("Donor_Pack", {
+        title: report.title,
+        subtitle: report.subtitle,
+        generatedAt: report.generated_at,
+        source: report.source,
+        kpis: {
+          enterprises: k.total_enterprises ?? 0,
+          projectedRevenue: k.total_projected_revenue ?? 0,
+          netJobs: k.net_jobs ?? 0,
+          avgRiskScore: k.avg_risk_score ?? 0,
+          highRisk: k.high_risk_count ?? 0,
+          mediumRisk: k.medium_risk_count ?? 0,
+          lowRisk: k.low_risk_count ?? 0,
+        },
+        takeaways,
+        horizonData: ["1", "2", "3"].map((h) => ({
+          label: h === "1" ? "1 Month" : h === "2" ? "2 Months" : "3 Months",
+          totalRevenue: hs[h]?.total_revenue ?? 0,
+          netJobs: hs[h]?.net_jobs ?? 0,
+          avgRiskScore: hs[h]?.avg_risk_score ?? 0,
+        })),
+        actionItems: report.action_items ?? [],
+      });
+      return;
+    }
+
     const rows = [
       { Section: "Report Type", Item: report.title, Value: report.subtitle },
       { Section: "Generated", Item: "Timestamp", Value: new Date(report.generated_at).toLocaleString() },
@@ -955,6 +1388,173 @@ export default function ReportsPage() {
     );
   };
 
+  const deterministicInsights = useMemo<AiInsight[]>(() => {
+    if (!report) {
+      return [
+        {
+          id: "reports-waiting",
+          title: "Report intelligence",
+          narrative: "Generate a report to unlock AI insights on risk, livelihood, and revenue signals.",
+          confidence: 42,
+          tone: "neutral",
+        },
+      ];
+    }
+
+    const highRiskShare = report.kpis.total_enterprises > 0
+      ? (report.kpis.high_risk_count / report.kpis.total_enterprises) * 100
+      : 0;
+    return [
+      {
+        id: "reports-risk",
+        title: "Risk concentration",
+        narrative: `${highRiskShare.toFixed(1)}% of enterprises are high risk in this ${report.report_type.replace("_", " ")} report view.`,
+        confidence: clampConfidence(58 + Math.min(25, report.kpis.total_enterprises / 10)),
+        tone: highRiskShare >= 30 ? "warning" : "success",
+        evidence: [
+          `High risk: ${report.kpis.high_risk_count}`,
+          `Total enterprises: ${report.kpis.total_enterprises}`,
+        ],
+        actions: ["Prioritize high-risk enterprises with both high arrears and weak job outlook."],
+      },
+      {
+        id: "reports-livelihood",
+        title: "Livelihood signal",
+        narrative: `Net jobs projection is ${fmt(report.kpis.net_jobs)} with ${fmt(report.kpis.total_jobs_created)} jobs created across the forecast horizon.`,
+        confidence: clampConfidence(65),
+        tone: report.kpis.net_jobs < 0 ? "warning" : "success",
+        evidence: [`Net jobs: ${fmt(report.kpis.net_jobs)}`],
+        actions: ["Pair job signals with advisory interventions in vulnerable sectors."],
+      },
+      {
+        id: "reports-revenue",
+        title: "Revenue resilience",
+        narrative: `Projected 3-month revenue stands at ${fmt(report.kpis.total_projected_revenue, "RWF ")}.`,
+        confidence: clampConfidence(62 + Math.min(20, report.country_breakdown.length * 3)),
+        tone: "neutral",
+        evidence: [`Countries in report: ${report.country_breakdown.length}`],
+        actions: ["Use sector and country breakdowns to target stabilization resources."],
+      },
+    ];
+  }, [report]);
+
+  const reportContext = useMemo(() => {
+    if (!report) return null;
+    return {
+      report_type: report.report_type,
+      generated_at: report.generated_at,
+      kpis: report.kpis,
+      horizon_summary: report.horizon_summary,
+      sector_breakdown: (report.sector_breakdown || []).slice(0, 8),
+      country_breakdown: (report.country_breakdown || []).slice(0, 8),
+      action_items: report.action_items || [],
+    };
+  }, [report]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const refreshAiInsights = async () => {
+      if (!report || !reportContext) {
+        setLiveInsights(null);
+        setAiStatus("idle");
+        setAiJobId(null);
+        setAiLastUpdated(null);
+        return;
+      }
+
+      try {
+        const response = await apiFetch<{
+          status: string;
+          stale: boolean;
+          job_id?: string | null;
+          generated_at?: string | null;
+          insights?: AiInsight[];
+        }>(
+          "/ai-insights/refresh",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              scope_type: "reports",
+              scope_id: report.report_type,
+              context: reportContext,
+              force_refresh: false,
+            }),
+          },
+          true
+        );
+
+        if (cancelled) return;
+
+        if (response.insights && response.insights.length > 0) {
+          setLiveInsights(response.insights);
+        }
+        setAiStatus(response.status || "queued");
+        setAiJobId(response.job_id || null);
+        setAiLastUpdated(response.generated_at || null);
+      } catch {
+        if (cancelled) return;
+        setAiStatus("failed");
+      }
+    };
+
+    refreshAiInsights();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [report, reportContext]);
+
+  useEffect(() => {
+    if (!aiJobId || !report) return;
+
+    let cancelled = false;
+    const timer = setInterval(async () => {
+      try {
+        const status = await apiFetch<{ status: string }>(`/ai-insights/jobs/${aiJobId}`, { method: "GET" }, true);
+        if (cancelled) return;
+
+        setAiStatus(status.status);
+        if (status.status === "done") {
+          const latest = await apiFetch<{
+            status: string;
+            stale: boolean;
+            generated_at?: string | null;
+            insights?: AiInsight[];
+          }>(
+            `/ai-insights?scope_type=reports&scope_id=${encodeURIComponent(report.report_type)}`,
+            { method: "GET" },
+            true
+          );
+
+          if (!cancelled && latest.insights && latest.insights.length > 0) {
+            setLiveInsights(latest.insights);
+            setAiLastUpdated(latest.generated_at || null);
+          }
+          setAiJobId(null);
+          clearInterval(timer);
+        }
+
+        if (status.status === "failed") {
+          setAiJobId(null);
+          clearInterval(timer);
+        }
+      } catch {
+        if (!cancelled) {
+          setAiJobId(null);
+          clearInterval(timer);
+        }
+      }
+    }, 4000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [aiJobId, report]);
+
+  const aiInsights = liveInsights && liveInsights.length > 0 ? liveInsights : deterministicInsights;
+
   return (
     <RequireRole allow={["Admin", "Program Manager", "Advisor", "Donor"]}>
       <div className="space-y-6">
@@ -968,6 +1568,14 @@ export default function ReportsPage() {
           </p>
         </div>
 
+        <InsightPanel
+          title="AI Insights"
+          subtitle="Executive narratives generated from the active report context."
+          status={aiStatus}
+          lastUpdated={aiLastUpdated}
+          insights={aiInsights}
+        />
+
         {/* Controls */}
         <Card>
           <CardContent className="pt-5">
@@ -978,6 +1586,8 @@ export default function ReportsPage() {
                   [
                     { value: "donor_pack", icon: <Shield size={14} />, label: "Donor Pack" },
                     { value: "program_brief", icon: <FileText size={14} />, label: "Program Brief" },
+                    { value: "risk_intervention", icon: <Eye size={14} />, label: "Risk Intervention" },
+                    { value: "livelihood_impact", icon: <Users size={14} />, label: "Livelihood Impact" },
                   ] as { value: ReportType; icon: ReactNode; label: string }[]
                 ).map(({ value, icon, label }) => (
                   <button
@@ -991,23 +1601,6 @@ export default function ReportsPage() {
                   >
                     {icon}
                     {label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Data source selector */}
-              <div className="flex gap-2">
-                {(["live", "demo"] as DataSource[]).map((src) => (
-                  <button
-                    key={src}
-                    onClick={() => setDataSource(src)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                      dataSource === src
-                        ? "bg-inkomoko-blue/10 text-inkomoko-blue border-inkomoko-blue/30"
-                        : "bg-white text-inkomoko-muted border-inkomoko-border hover:border-inkomoko-blue/40"
-                    }`}
-                  >
-                    {src === "live" ? "Live Portfolio API" : "Demo Generator"}
                   </button>
                 ))}
               </div>
@@ -1097,8 +1690,12 @@ export default function ReportsPage() {
             </Card>
             {report.report_type === "donor_pack" ? (
               <DonorPackReport d={report} />
-            ) : (
+            ) : report.report_type === "program_brief" ? (
               <ProgramBriefReport d={report} />
+            ) : report.report_type === "risk_intervention" ? (
+              <RiskInterventionReport d={report} />
+            ) : (
+              <LivelihoodImpactReport d={report} />
             )}
           </>
         )}

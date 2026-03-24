@@ -13,12 +13,15 @@ Also writes metrics CSVs used by the model-cards endpoint.
 from __future__ import annotations
 
 import io
+import os
+import sys
 import warnings
 from pathlib import Path
 
 import joblib
 import numpy as np
 import pandas as pd
+import psycopg
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.impute import SimpleImputer
@@ -53,14 +56,6 @@ def find_ml_dir(start: Path) -> Path:
 
 
 ML_DIR = find_ml_dir(BASE)
-ANON_DIR = ML_DIR / "Anomynized data" / "Anomynized data" / "Anomynized data"
-INVESTMENT_PATH = (
-    ANON_DIR / "Investment data_all clients_RW-KE-ET-SS_2021-2025_Inkomoko.csv"
-)
-BASELINE_PATH = (
-    ANON_DIR / "baseline_RW-ET-SS_existing businesses 2022-2025_Inkomoko.csv"
-)
-ENDLINE_PATH = ANON_DIR / "endline_RW-ET-SS_existing businesses 2022-2025_Inkomoko.csv"
 
 for d in [MODELS_DIR, METRICS_DIR, PREDICTIONS_DIR]:
     d.mkdir(parents=True, exist_ok=True)
@@ -271,208 +266,108 @@ def _encode_tier_labels(series: pd.Series) -> pd.Series:
     return s.map(TIER_MAP).fillna(1).astype(int)
 
 
+def normalize_db_url(url: str) -> str:
+    return url.replace("postgresql+asyncpg://", "postgresql://")
+
+
+def resolve_db_url() -> str:
+    env_url = os.getenv("DATABASE_URL") or os.getenv("POSTGRES_URL")
+    if env_url:
+        return normalize_db_url(env_url)
+
+    backend_dir = BASE.parent / "backend"
+    if backend_dir.exists():
+        sys.path.insert(0, str(backend_dir))
+        try:
+            from app.core.config import settings  # type: ignore
+
+            if settings.DATABASE_URL:
+                return normalize_db_url(settings.DATABASE_URL)
+        except Exception:
+            pass
+
+    raise RuntimeError(
+        "Database URL not found. Set DATABASE_URL/POSTGRES_URL or backend settings."
+    )
+
+
 def load_data():
-    """Load anonymized CSVs, engineer merged feature table and 1-3m targets."""
-    investment_df = load_csv_with_fallback(INVESTMENT_PATH)
-    baseline_df = load_csv_with_fallback(BASELINE_PATH)
-    endline_df = load_csv_with_fallback(ENDLINE_PATH)
+    """Load curated anonymized data from Postgres and build training table."""
+    db_url = resolve_db_url()
 
-    investment = normalize_columns(investment_df)
-    baseline = normalize_columns(baseline_df)
-    endline = normalize_columns(endline_df)
-
-    investment = parse_dates(
-        investment,
-        ["submissionDate", "approvalDate", "disbursementDate", "lastPaymentDate"],
-        dayfirst=False,
+    query = """
+    WITH latest_loan AS (
+      SELECT *
+      FROM (
+        SELECT
+          i.*,
+          ROW_NUMBER() OVER (
+            PARTITION BY i.client_id
+            ORDER BY i.disbursement_date DESC NULLS LAST, i.loan_number
+          ) AS rn
+        FROM vw_anon_investment_curated i
+      ) ranked
+      WHERE rn = 1
     )
-    baseline = parse_dates(baseline, ["survey_date"], dayfirst=True)
-    endline = parse_dates(endline, ["survey_date"], dayfirst=True)
+    SELECT
+      imp.unique_id,
+      imp.client_id,
+      imp.country_code,
+      imp.survey_date,
+      imp.business_sector,
+      imp.business_sub_sector,
+      imp.client_location,
+      imp.nationality,
+      imp.education_level,
+      imp.strata,
+      imp.revenue_3m,
+      imp.jobs_created_3m,
+      imp.jobs_lost_3m,
+      imp.risk_score_3m,
+      imp.risk_tier_3m,
+      imp.nps_promoter,
+      imp.nps_detractor,
+      imp.satisfied_yes,
+      imp.satisfied_no,
+      loan.loan_number AS "loanNumber",
+      loan.client_id AS "ClientId",
+      loan.client_id AS "BaselineEndlineClientId",
+      loan.days_in_arrears AS "daysInArrears",
+      loan.installment_in_arrears AS "installmentInArrears",
+      loan.approved_amount AS "approvedAmount",
+      loan.disbursed_amount AS "disbursedAmount",
+      loan.actual_payment_amount AS "actualPaymentAmount",
+      loan.amount_past_due AS "amountPastDue",
+      loan.principal_paid AS "principalPaid",
+      loan.current_balance AS "currentBalance"
+    FROM vw_anon_impact_curated imp
+    LEFT JOIN latest_loan loan ON loan.client_id = imp.client_id
+    """
 
-    inv_num_cols = [
-        "daysInArrears",
-        "installmentInArrears",
-        "approvedAmount",
-        "disbursedAmount",
-        "actualPaymentAmount",
-        "amountPastDue",
-        "scheduledPaymentAmount",
-        "principalPaid",
-        "currentBalance",
-        "principalBalance",
-        "interestBalance",
-        "feesBalance",
-        "termsDuration",
-        "cycle",
-        "age",
-        "lastPaymentAmount",
-        "scheduledPrincipalAmount",
-        "scheduledInterestAmount",
-        "scheduledFeesAmount",
-        "principalPastDue",
-        "interestPastDue",
-        "feesPastDue",
-    ]
-    baseline_num_cols = [
-        "job_created",
-        "revenue",
-        "hh_expense",
-        "monthly_customer",
-        "number_of_people_reponsible",
-        "age",
-    ]
-    endline_num_cols = baseline_num_cols + [
-        "nps_detractor",
-        "nps_passive",
-        "nps_promoter",
-        "satisfied_yes",
-        "satisfied_no",
-    ]
+    with psycopg.connect(db_url) as conn:
+        model_df = pd.read_sql_query(query, conn)
 
-    investment = to_num(investment, inv_num_cols)
-    baseline = to_num(baseline, baseline_num_cols)
-    endline = to_num(endline, endline_num_cols)
+    model_df["survey_date"] = pd.to_datetime(model_df["survey_date"], errors="coerce")
+    model_df["revenue_3m"] = pd.to_numeric(model_df["revenue_3m"], errors="coerce").clip(lower=0)
+    model_df["jobs_created_3m"] = pd.to_numeric(model_df["jobs_created_3m"], errors="coerce").clip(lower=0)
+    model_df["jobs_lost_3m"] = pd.to_numeric(model_df["jobs_lost_3m"], errors="coerce").clip(lower=0)
+    model_df["risk_score_3m"] = pd.to_numeric(model_df["risk_score_3m"], errors="coerce").clip(0, 1)
+    model_df["risk_tier_3m"] = model_df["risk_tier_3m"].astype(str).str.upper().str.strip()
 
-    for df, col in [
-        (investment, "BaselineEndlineClientId"),
-        (investment, "ClientId"),
-        (baseline, "client_id"),
-        (endline, "client_id"),
-    ]:
-        if col in df.columns:
-            df[col] = df[col].astype(str).str.strip()
+    model_df["repayment_ratio"] = pd.to_numeric(
+        model_df.get("actualPaymentAmount"), errors="coerce"
+    ) / pd.to_numeric(model_df.get("disbursedAmount"), errors="coerce").replace(0, np.nan)
+    model_df["utilization_ratio"] = pd.to_numeric(
+        model_df.get("disbursedAmount"), errors="coerce"
+    ) / pd.to_numeric(model_df.get("approvedAmount"), errors="coerce").replace(0, np.nan)
+    model_df["past_due_ratio"] = pd.to_numeric(
+        model_df.get("amountPastDue"), errors="coerce"
+    ) / pd.to_numeric(model_df.get("disbursedAmount"), errors="coerce").replace(0, np.nan)
+    model_df["principal_completion_ratio"] = pd.to_numeric(
+        model_df.get("principalPaid"), errors="coerce"
+    ) / pd.to_numeric(model_df.get("disbursedAmount"), errors="coerce").replace(0, np.nan)
 
-    loan_sort_col = (
-        "disbursementDate"
-        if "disbursementDate" in investment.columns
-        else "approvalDate"
-    )
-    investment = investment.sort_values(["ClientId", loan_sort_col])
-    loan_latest = investment.groupby("ClientId", as_index=False).tail(1).copy()
-
-    loan_latest["repayment_ratio"] = loan_latest["actualPaymentAmount"] / loan_latest[
-        "scheduledPaymentAmount"
-    ].replace(0, np.nan)
-    loan_latest["utilization_ratio"] = loan_latest["disbursedAmount"] / loan_latest[
-        "approvedAmount"
-    ].replace(0, np.nan)
-    loan_latest["past_due_ratio"] = loan_latest["amountPastDue"] / loan_latest[
-        "scheduledPaymentAmount"
-    ].replace(0, np.nan)
-    loan_latest["principal_completion_ratio"] = loan_latest[
-        "principalPaid"
-    ] / loan_latest["disbursedAmount"].replace(0, np.nan)
-
-    baseline_ctx = baseline[
-        [
-            c
-            for c in [
-                "client_id",
-                "survey_date",
-                "job_created",
-                "revenue",
-                "hh_expense",
-                "monthly_customer",
-                "business_sector",
-                "business_location",
-                "education_level",
-                "gender",
-                "strata",
-                "have_bank_account",
-                "is_business_registered",
-            ]
-            if c in baseline.columns
-        ]
-    ].copy()
-    baseline_ctx = baseline_ctx.rename(
-        columns={
-            "survey_date": "baseline_survey_date",
-            "job_created": "baseline_job_created",
-            "revenue": "baseline_revenue",
-            "hh_expense": "baseline_hh_expense",
-        }
-    )
-
-    endline_ctx = endline[
-        [
-            c
-            for c in [
-                "client_id",
-                "survey_date",
-                "job_created",
-                "revenue",
-                "hh_expense",
-                "monthly_customer",
-                "business_sector",
-                "business_location",
-                "education_level",
-                "gender",
-                "strata",
-                "have_bank_account",
-                "is_business_registered",
-                "nps_detractor",
-                "nps_passive",
-                "nps_promoter",
-                "satisfied_yes",
-                "satisfied_no",
-            ]
-            if c in endline.columns
-        ]
-    ].copy()
-    endline_ctx = endline_ctx.rename(
-        columns={
-            "survey_date": "endline_survey_date",
-            "job_created": "endline_job_created",
-            "revenue": "endline_revenue",
-            "hh_expense": "endline_hh_expense",
-        }
-    )
-
-    survey_ctx = baseline_ctx.merge(
-        endline_ctx, on="client_id", how="outer", suffixes=("_baseline", "_endline")
-    )
-
-    model_df = loan_latest.merge(
-        survey_ctx,
-        left_on="BaselineEndlineClientId",
-        right_on="client_id",
-        how="left",
-    )
-
-    model_df["survey_date"] = model_df["endline_survey_date"].where(
-        model_df["endline_survey_date"].notna(), model_df["baseline_survey_date"]
-    )
-
-    # 3m targets from notebook logic.
-    model_df["revenue_3m"] = pd.to_numeric(
-        model_df.get("endline_revenue"), errors="coerce"
-    ).clip(lower=0)
-    model_df["jobs_created_3m"] = pd.to_numeric(
-        model_df.get("endline_job_created"), errors="coerce"
-    ).clip(lower=0)
-    baseline_jobs = pd.to_numeric(model_df.get("baseline_job_created"), errors="coerce")
-    endline_jobs = pd.to_numeric(model_df.get("endline_job_created"), errors="coerce")
-    model_df["jobs_lost_3m"] = (baseline_jobs - endline_jobs).clip(lower=0).fillna(0)
-
-    risk_raw = (
-        pd.to_numeric(model_df.get("daysInArrears"), errors="coerce")
-        .fillna(0)
-        .clip(lower=0)
-        * 0.55
-        + pd.to_numeric(model_df.get("amountPastDue"), errors="coerce")
-        .fillna(0)
-        .clip(lower=0)
-        .rank(pct=True)
-        * 100
-        * 0.30
-        + pd.to_numeric(model_df.get("installmentInArrears"), errors="coerce")
-        .fillna(0)
-        .clip(lower=0)
-        * 0.15
-    )
-    risk_max = risk_raw.max() if float(risk_raw.max() or 0) > 0 else 1.0
-    model_df["risk_score_3m"] = (risk_raw / risk_max).clip(0, 1)
-    model_df["risk_tier_3m"] = _tier_from_score(model_df["risk_score_3m"])
+    model_df["revenue_to_expense_ratio"] = np.nan
 
     # Derive all configured horizons from 3m anchors as a compatibility bridge.
     # This keeps API contracts stable while true longitudinal labels are introduced.
@@ -489,14 +384,8 @@ def load_data():
         )
         model_df[f"risk_tier_{h}m"] = _tier_from_score(model_df[f"risk_score_{h}m"])
 
-    model_df["revenue_to_expense_ratio"] = model_df["revenue_3m"] / pd.to_numeric(
-        model_df.get("endline_hh_expense"), errors="coerce"
-    ).replace(0, np.nan)
-
-    join_coverage = (
-        model_df["client_id"].notna().mean() if "client_id" in model_df.columns else 0.0
-    )
-    print(f"Join coverage (loan->survey): {join_coverage:.2%}")
+    join_coverage = model_df["ClientId"].notna().mean() if "ClientId" in model_df.columns else 0.0
+    print(f"Join coverage (impact->latest loan): {join_coverage:.2%}")
 
     for c in model_df.columns:
         if hasattr(model_df[c], "dtype") and model_df[c].dtype.kind in "fiu":
@@ -541,8 +430,7 @@ def target_available(train_df: pd.DataFrame, test_df: pd.DataFrame, col: str) ->
 
 
 def main():
-    print("Loading and engineering anonymized data…")
-    print(f"Anonymized directory: {ANON_DIR}")
+    print("Loading and engineering curated anonymized DB data…")
     df = load_data()
     train_df, test_df = split_data(df)
 

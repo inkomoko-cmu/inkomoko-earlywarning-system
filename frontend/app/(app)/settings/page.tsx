@@ -5,8 +5,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { ErrorCard } from "@/components/ui/ErrorCard";
+import { InsightPanel } from "@/components/ui/InsightPanel";
 import { RequireRole } from "@/components/auth/RequireRole";
 import { apiFetch } from "@/lib/api";
+import { type AiInsight, clampConfidence } from "@/lib/insights";
+import { useLiveAiInsights } from "@/lib/useLiveAiInsights";
 import { Activity, Bell, Bot, Clock3, Database, Settings2, ShieldAlert, Sparkles, UserPlus, Users, RotateCcw, Save } from "lucide-react";
 
 type RiskTier = {
@@ -275,6 +278,82 @@ export default function SettingsPage() {
     }
   };
 
+  const tabs = [
+    { id: "risk" as const, label: "Risk Thresholds", icon: <ShieldAlert size={16} /> },
+    { id: "horizons" as const, label: "Prediction Horizons", icon: <Activity size={16} /> },
+    { id: "retraining" as const, label: "Retraining", icon: <Bot size={16} /> },
+    { id: "cron" as const, label: "Cron Jobs", icon: <Clock3 size={16} /> },
+    { id: "alerts" as const, label: "Alert Rules", icon: <Bell size={16} /> },
+    { id: "users" as const, label: "Users", icon: <UserPlus size={16} /> },
+    { id: "snapshot" as const, label: "Snapshot", icon: <Database size={16} /> },
+  ];
+
+  const aiInsights = useMemo<AiInsight[]>(() => {
+    if (!draft) return [];
+    const governanceCoverage = (enabledHorizons / 3 + enabledCronJobs / 3) / 2;
+    return [
+      {
+        id: "settings-governance",
+        title: "Configuration governance",
+        narrative: `${dirty ? "There are pending configuration edits" : "All configuration edits are synchronized"} across risk, horizon, retraining, and alert controls.`,
+        confidence: clampConfidence(60 + governanceCoverage * 25),
+        tone: dirty ? "warning" : "success",
+        evidence: [
+          `Enabled horizons: ${enabledHorizons}/3`,
+          `Enabled cron jobs: ${enabledCronJobs}/3`,
+        ],
+        actions: [dirty ? "Save changes to lock a single approved control baseline." : "Continue periodic control review to maintain model discipline."],
+      },
+      {
+        id: "settings-access",
+        title: "Access resilience",
+        narrative: `${activeUsers} active users are provisioned with ${adminUsers} admin account(s), balancing operational coverage and privileged access.`,
+        confidence: clampConfidence(65),
+        tone: adminUsers <= 1 ? "warning" : "neutral",
+        actions: [adminUsers <= 1 ? "Maintain at least two active admins for continuity." : "Review privileged accounts monthly for least-privilege alignment."],
+      },
+      {
+        id: "settings-ops",
+        title: "Operational readiness",
+        narrative: `Alert delivery is configured for ${draft.alert_rules.delivery_channel.replace("_", " ")}, with retraining ${draft.retraining.enabled ? "enabled" : "disabled"} on a ${draft.retraining.frequency} cadence.`,
+        confidence: clampConfidence(draft.retraining.enabled ? 76 : 62),
+        tone: draft.retraining.enabled ? "neutral" : "warning",
+        actions: ["Align retraining cadence with data import frequency to reduce prediction drift."],
+      },
+    ];
+  }, [
+    activeUsers,
+    adminUsers,
+    dirty,
+    draft?.alert_rules.delivery_channel,
+    draft?.retraining.enabled,
+    draft?.retraining.frequency,
+    enabledCronJobs,
+    enabledHorizons,
+  ]);
+
+  const aiContext = useMemo(
+    () => ({
+      settings: draft,
+      users,
+      summary: {
+        enabledHorizons,
+        enabledCronJobs,
+        activeUsers,
+        adminUsers,
+        dirty,
+      },
+      activeTab,
+    }),
+    [draft, users, enabledHorizons, enabledCronJobs, activeUsers, adminUsers, dirty, activeTab]
+  );
+
+  const liveAi = useLiveAiInsights({
+    scopeType: "settings",
+    context: aiContext,
+    fallbackInsights: aiInsights,
+  });
+
   if (loading || !draft) {
     return (
       <RequireRole allow={["Admin"]}>
@@ -286,16 +365,6 @@ export default function SettingsPage() {
       </RequireRole>
     );
   }
-
-  const tabs = [
-    { id: "risk" as const, label: "Risk Thresholds", icon: <ShieldAlert size={16} /> },
-    { id: "horizons" as const, label: "Prediction Horizons", icon: <Activity size={16} /> },
-    { id: "retraining" as const, label: "Retraining", icon: <Bot size={16} /> },
-    { id: "cron" as const, label: "Cron Jobs", icon: <Clock3 size={16} /> },
-    { id: "alerts" as const, label: "Alert Rules", icon: <Bell size={16} /> },
-    { id: "users" as const, label: "Users", icon: <UserPlus size={16} /> },
-    { id: "snapshot" as const, label: "Snapshot", icon: <Database size={16} /> },
-  ];
 
   return (
     <RequireRole allow={["Admin"]}>
@@ -326,6 +395,14 @@ export default function SettingsPage() {
 
         {error && <ErrorCard title="Settings error" message={error} variant="error" onDismiss={() => setError(null)} />}
         {success && <ErrorCard title="Success" message={success} variant="info" onDismiss={() => setSuccess(null)} />}
+
+        <InsightPanel
+          title="AI Insights"
+          subtitle="Narrative interpretation of governance posture and operational configuration."
+          status={liveAi.status}
+          lastUpdated={liveAi.lastUpdated}
+          insights={liveAi.insights}
+        />
 
         <div className="flex flex-col md:flex-row items-center justify-between gap-4 rounded-2xl border border-inkomoko-border bg-white p-5 shadow-card">
           <div className="flex flex-wrap items-center gap-2">

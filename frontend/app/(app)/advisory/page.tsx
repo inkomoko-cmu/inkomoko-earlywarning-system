@@ -3,9 +3,12 @@
 import { Card, CardContent, CardHeader, CardDescription, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { InsightPanel } from "@/components/ui/InsightPanel";
 import { ENTERPRISES } from "@/lib/data";
 import { exportPDF } from "@/lib/export";
 import { useMemo, useState } from "react";
+import { type AiInsight, clampConfidence } from "@/lib/insights";
+import { useLiveAiInsights } from "@/lib/useLiveAiInsights";
 import { BookOpenCheck, Sparkles, ShieldCheck } from "lucide-react";
 import { RequireRole } from "@/components/auth/RequireRole";
 
@@ -74,6 +77,58 @@ export default function AdvisoryPage() {
   const [idx, setIdx] = useState(0);
   const enterprise = ENTERPRISES[idx];
   const advice = useMemo(() => buildAdvice(enterprise.riskTier), [enterprise.riskTier]);
+  const aiInsights = useMemo<AiInsight[]>(() => {
+    const netJobs = enterprise.jobsCreated3mForecast - enterprise.jobsLost3mForecast;
+    return [
+      {
+        id: "advisory-pathway-fit",
+        title: "Pathway fit",
+        narrative: `${advice.title} aligns to current ${enterprise.riskTier} risk posture and projected net jobs ${netJobs >= 0 ? "+" : ""}${netJobs}.`,
+        confidence: clampConfidence(68 + (enterprise.riskTier === "High" ? 10 : 0)),
+        tone: enterprise.riskTier === "High" ? "warning" : "success",
+        evidence: [
+          `Risk score: ${enterprise.riskScore.toFixed(3)}`,
+          `Revenue forecast: $${enterprise.revenue3mForecastUSD.toLocaleString()}`,
+        ],
+        actions: [advice.steps[0]],
+      },
+      {
+        id: "advisory-governance",
+        title: "Governance confidence",
+        narrative: `Plan is backed by ${advice.citations.length} evidence citations and ${advice.governance.length} governance checks.`,
+        confidence: clampConfidence(55 + advice.citations.length * 10),
+        tone: "neutral",
+        evidence: advice.citations.map((c) => `${c.doc} - ${c.section}`).slice(0, 2),
+        actions: ["Log rationale and follow-up cadence in advisory notes."],
+      },
+      {
+        id: "advisory-priority",
+        title: "Execution priority",
+        narrative: enterprise.riskTier === "High"
+          ? "Execute first two stabilization actions within the next 7 days to contain downside risk."
+          : "Maintain monthly monitoring and trigger escalation only if risk trajectory deteriorates.",
+        confidence: clampConfidence(70),
+        tone: enterprise.riskTier === "High" ? "danger" : "success",
+        actions: ["Assign owner and due date for the first action item."],
+      },
+    ];
+  }, [advice, enterprise]);
+
+  const aiContext = useMemo(
+    () => ({
+      enterprise,
+      advice,
+      selectedIndex: idx,
+    }),
+    [enterprise, advice, idx]
+  );
+
+  const liveAi = useLiveAiInsights({
+    scopeType: "advisory",
+    scopeId: String(idx),
+    context: aiContext,
+    fallbackInsights: aiInsights,
+  });
 
   const exportAdvice = () => {
     const rows = [
@@ -103,6 +158,14 @@ export default function AdvisoryPage() {
             Structured recommendations grounded in approved playbooks with traceable citations and governance controls.
           </p>
         </div>
+
+        <InsightPanel
+          title="AI Insights"
+          subtitle="Action-first narratives generated from the selected enterprise and advisory pathway."
+          status={liveAi.status}
+          lastUpdated={liveAi.lastUpdated}
+          insights={liveAi.insights}
+        />
 
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
           <Card className="xl:col-span-1">

@@ -12,6 +12,9 @@ import {
 import { RequireRole } from "@/components/auth/RequireRole";
 import { apiFetch } from "@/lib/api";
 import { normalizePortfolioOverview, type PortfolioOverview } from "@/lib/portfolio";
+import { InsightPanel } from "@/components/ui/InsightPanel";
+import { type AiInsight, clampConfidence, trendDirection } from "@/lib/insights";
+import { useLiveAiInsights } from "@/lib/useLiveAiInsights";
 
 // ──────────────────────────────────────── TYPES ──────────────────────────────────────────
 
@@ -184,6 +187,74 @@ export default function PortfolioPage() {
     };
   }, [riskDistribution]);
 
+  const aiInsights = useMemo<AiInsight[]>(() => {
+    const highPct = riskStats.high?.pct ?? 0;
+    const arrearsWatch = filteredLoans.filter((loan) => (loan.daysinarrears ?? 0) > 30).length;
+    const coverageConfidence = clampConfidence(
+      50 +
+      Math.min(20, byCountry.length * 5) +
+      Math.min(20, sectors.length * 2) +
+      Math.min(10, statuses.length * 3)
+    );
+    const momentum = trendDirection(overview?.revenue_delta_pct ?? 0);
+
+    return [
+      {
+        id: "portfolio-risk-pressure",
+        title: "Risk pressure",
+        narrative: `High-risk share is ${highPct.toFixed(1)}% with ${arrearsWatch.toLocaleString()} loans above 30 arrears days in the active filtered set.`,
+        confidence: coverageConfidence,
+        tone: highPct >= 35 ? "danger" : highPct >= 20 ? "warning" : "success",
+        evidence: [
+          `Filtered loans: ${filteredLoans.length.toLocaleString()}`,
+          `PAR30: ${overview?.par30_pct?.toFixed(1) ?? "0.0"}%`,
+        ],
+        actions: ["Focus coaching and collections on high-arrears segments first."],
+      },
+      {
+        id: "portfolio-exposure",
+        title: "Exposure and liquidity",
+        narrative: `Outstanding exposure is ${formatMoney(overview?.total_outstanding)} against disbursed ${formatMoney(overview?.total_disbursed)} with average arrears ${overview?.avg_days_in_arrears?.toFixed(1) ?? "0.0"} days.`,
+        confidence: clampConfidence(60 + Math.min(25, byCountry.length * 4)),
+        tone: (overview?.avg_days_in_arrears ?? 0) > 25 ? "warning" : "neutral",
+        evidence: [
+          `Countries represented: ${byCountry.length}`,
+          `Outstanding: ${formatMoney(overview?.total_outstanding)}`,
+        ],
+        actions: ["Track daily aging to prevent medium-risk loans drifting into high risk."],
+      },
+      {
+        id: "portfolio-momentum",
+        title: "Momentum snapshot",
+        narrative: `Revenue momentum is ${momentum} (${overview?.revenue_delta_pct?.toFixed(1) ?? "0.0"}% delta) and net jobs at portfolio level are ${((overview?.total_jobs_created_3m || 0) - (overview?.total_jobs_lost_3m || 0)).toLocaleString()}.`,
+        confidence: clampConfidence(55 + Math.min(20, filteredLoans.length / 100)),
+        tone: momentum === "down" ? "warning" : "success",
+        evidence: [
+          `Jobs created: ${overview?.total_jobs_created_3m ?? 0}`,
+          `Jobs lost: ${overview?.total_jobs_lost_3m ?? 0}`,
+        ],
+        actions: ["Use sector and status filters to isolate declining pockets quickly."],
+      },
+    ];
+  }, [riskStats, filteredLoans, byCountry.length, sectors.length, statuses.length, overview]);
+
+  const aiContext = useMemo(
+    () => ({
+      overview,
+      riskDistribution,
+      byCountry,
+      filteredLoans: filteredLoans.slice(0, 300),
+      filters: { country, sector, status, search },
+    }),
+    [overview, riskDistribution, byCountry, filteredLoans, country, sector, status, search]
+  );
+
+  const liveAi = useLiveAiInsights({
+    scopeType: "portfolio",
+    context: aiContext,
+    fallbackInsights: aiInsights,
+  });
+
   return (
     <RequireRole allow={["Admin", "Program Manager", "Advisor"]}>
       <div className="space-y-8">
@@ -259,10 +330,18 @@ export default function PortfolioPage() {
             <span>{apiError}</span>
             <div className="flex gap-2">
               <button onClick={() => setApiError(null)} className="text-xs underline">Dismiss</button>
-              <button onClick={loadData} className="text-xs underline">Retry</button>
+              <button onClick={() => loadData(true)} className="text-xs underline">Retry</button>
             </div>
           </div>
         )}
+
+        <InsightPanel
+          title="AI Insights"
+          subtitle="Portfolio intelligence generated from the filters and metrics currently in view."
+          status={liveAi.status}
+          lastUpdated={liveAi.lastUpdated}
+          insights={liveAi.insights}
+        />
 
         {/* ════════════════════════════════════════════════════════════════ */}
         {/* KPI CARDS                                                        */}

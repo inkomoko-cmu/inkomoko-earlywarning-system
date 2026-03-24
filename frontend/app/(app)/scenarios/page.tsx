@@ -3,9 +3,13 @@
 import { Card, CardContent, CardHeader, CardDescription, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { SCENARIOS, ENTERPRISES } from "@/lib/data";
+import { InsightPanel } from "@/components/ui/InsightPanel";
+import { SCENARIOS } from "@/lib/data";
 import { exportPDF } from "@/lib/export";
-import { useMemo, useState } from "react";
+import { apiFetch } from "@/lib/api";
+import { useEffect, useMemo, useState } from "react";
+import { type AiInsight, clampConfidence } from "@/lib/insights";
+import { useLiveAiInsights } from "@/lib/useLiveAiInsights";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, BarChart, Bar } from "recharts";
 import { Gauge, Zap } from "lucide-react";
 import { RequireRole } from "@/components/auth/RequireRole";
@@ -16,12 +20,37 @@ function applyScenario(base: number, inflation: number, fx: number, fundingCut: 
   return base * shock;
 }
 
+type EnterpriseProfile = {
+  unique_id: string;
+  risk_tier_3m?: string;
+  revenue_3m?: number;
+  jobs_created_3m?: number;
+  jobs_lost_3m?: number;
+};
+
 export default function ScenariosPage() {
   const [idx, setIdx] = useState(0);
+  const [enterprises, setEnterprises] = useState<EnterpriseProfile[]>([]);
+  const [apiError, setApiError] = useState<string | null>(null);
   const s = SCENARIOS[idx];
 
+  useEffect(() => {
+    const loadEnterprises = async () => {
+      try {
+        setApiError(null);
+        const rows = await apiFetch<EnterpriseProfile[]>("/portfolio/enterprises", { method: "GET" }, true, { cacheTtlMs: 120000 });
+        setEnterprises(Array.isArray(rows) ? rows : []);
+      } catch (err: any) {
+        setApiError(err?.message ?? "Failed to load enterprise profiles.");
+        setEnterprises([]);
+      }
+    };
+
+    loadEnterprises();
+  }, []);
+
   const summary = useMemo(() => {
-    const baseHigh = ENTERPRISES.filter((e) => e.riskTier === "High").length;
+    const baseHigh = enterprises.filter((e) => (e.risk_tier_3m || "").toUpperCase() === "HIGH").length;
     const stressedHigh = Math.round(
       baseHigh *
         (1 +
@@ -30,17 +59,20 @@ export default function ScenariosPage() {
           s.params.fundingCut * 0.6 +
           s.params.conflictDisruption * 0.8)
     );
-    const baseRevenue = ENTERPRISES.reduce((a, e) => a + e.revenue3mForecastUSD, 0);
+    const baseRevenue = enterprises.reduce((a, e) => a + (Number(e.revenue_3m) || 0), 0);
     const stressedRevenue = Math.round(
       baseRevenue /
         applyScenario(1, s.params.inflation, s.params.fxDepreciation, s.params.fundingCut, s.params.conflictDisruption)
     );
-    const baseJobsNet = ENTERPRISES.reduce((a, e) => a + e.jobsCreated3mForecast - e.jobsLost3mForecast, 0);
+    const baseJobsNet = enterprises.reduce(
+      (a, e) => a + (Number(e.jobs_created_3m) || 0) - (Number(e.jobs_lost_3m) || 0),
+      0
+    );
     const stressedJobsNet = Math.round(
       baseJobsNet * (1 - (s.params.inflation * 0.35 + s.params.fundingCut * 0.45 + s.params.conflictDisruption * 0.55))
     );
     return { baseHigh, stressedHigh, baseRevenue, stressedRevenue, baseJobsNet, stressedJobsNet };
-  }, [s]);
+  }, [enterprises, s]);
 
   const chart = useMemo(() => {
     const months = ["Now", "+1M", "+2M", "+3M"];
@@ -64,6 +96,66 @@ export default function ScenariosPage() {
     ];
   }, [s]);
 
+  const aiInsights = useMemo<AiInsight[]>(() => {
+    const highestDriver = sensitivity.slice().sort((a, b) => b.impact - a.impact)[0];
+    const revenueDeltaPct = summary.baseRevenue > 0
+      ? ((summary.stressedRevenue - summary.baseRevenue) / summary.baseRevenue) * 100
+      : 0;
+    const highRiskDelta = summary.stressedHigh - summary.baseHigh;
+    const confidence = clampConfidence(52 + Math.min(25, enterprises.length / 10));
+
+    return [
+      {
+        id: "scenario-dominant-driver",
+        title: "Dominant stress driver",
+        narrative: `${highestDriver?.driver || "Scenario"} is the strongest shock contributor at ${highestDriver?.impact || 0}% under ${s.name}.`,
+        confidence,
+        tone: (highestDriver?.impact || 0) >= 35 ? "warning" : "neutral",
+        evidence: sensitivity.map((item) => `${item.driver}: ${item.impact}%`).slice(0, 3),
+        actions: ["Prioritize mitigation actions for the dominant driver first."],
+      },
+      {
+        id: "scenario-risk-shift",
+        title: "Risk migration outlook",
+        narrative: `High-risk enterprises move from ${summary.baseHigh} to ${summary.stressedHigh} (${highRiskDelta >= 0 ? "+" : ""}${highRiskDelta}) in this simulation.`,
+        confidence: clampConfidence(confidence + 5),
+        tone: highRiskDelta > 0 ? "danger" : "success",
+        evidence: [`Baseline high-risk: ${summary.baseHigh}`, `Scenario high-risk: ${summary.stressedHigh}`],
+        actions: ["Allocate advisory capacity to the projected incremental high-risk group."],
+      },
+      {
+        id: "scenario-revenue-impact",
+        title: "Revenue impact",
+        narrative: `Projected revenue shifts by ${revenueDeltaPct.toFixed(1)}% relative to baseline over the modeled horizon.`,
+        confidence: clampConfidence(confidence + 3),
+        tone: revenueDeltaPct < -10 ? "warning" : "success",
+        evidence: [
+          `Baseline revenue: $${summary.baseRevenue.toLocaleString()}`,
+          `Scenario revenue: $${summary.stressedRevenue.toLocaleString()}`,
+        ],
+        actions: ["Use the sensitivity chart to sequence financial protection measures."],
+      },
+    ];
+  }, [s.name, sensitivity, summary, enterprises.length]);
+
+  const aiContext = useMemo(
+    () => ({
+      scenario: s,
+      summary,
+      sensitivity,
+      trajectory: chart,
+      enterpriseCount: enterprises.length,
+    }),
+    [s, summary, sensitivity, chart, enterprises.length]
+  );
+
+  const liveAi = useLiveAiInsights({
+    scopeType: "scenarios",
+    scopeId: s.name,
+    context: aiContext,
+    fallbackInsights: aiInsights,
+  });
+
   const exportScenario = () => {
     const rows = [
       { Metric: "High-risk enterprises", Baseline: summary.baseHigh, Scenario: summary.stressedHigh },
@@ -86,6 +178,14 @@ export default function ScenariosPage() {
             Stress testing under compounding shocks (inflation, FX, funding, conflict) to support proactive intervention planning.
           </p>
         </div>
+
+        <InsightPanel
+          title="AI Insights"
+          subtitle="Scenario interpretation generated from active shock settings and simulated outcomes."
+          status={liveAi.status}
+          lastUpdated={liveAi.lastUpdated}
+          insights={liveAi.insights}
+        />
 
         <Card>
           <CardHeader className="flex-col md:flex-row md:items-end md:justify-between gap-4">
@@ -176,6 +276,7 @@ export default function ScenariosPage() {
                 Under <span className="font-semibold text-inkomoko-text">{s.name}</span>, prioritize rapid stabilization for high-risk tiers, expand cashflow coaching capacity,
                 and intensify market linkage support to offset revenue pressure. Review intervention targeting weekly until shock indicators normalize.
               </p>
+              {apiError && <p className="mt-2 text-xs text-red-600">{apiError}</p>}
             </div>
           </CardContent>
         </Card>

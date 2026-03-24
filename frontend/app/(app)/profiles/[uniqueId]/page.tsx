@@ -6,7 +6,10 @@ import { useParams } from "next/navigation";
 import { RequireRole } from "@/components/auth/RequireRole";
 import { Badge } from "@/components/ui/Badge";
 import { ErrorCard } from "@/components/ui/ErrorCard";
+import { InsightPanel } from "@/components/ui/InsightPanel";
 import { apiFetch } from "@/lib/api";
+import { type AiInsight, clampConfidence } from "@/lib/insights";
+import { useLiveAiInsights } from "@/lib/useLiveAiInsights";
 import {
   ArrowLeft,
   Briefcase,
@@ -173,6 +176,55 @@ export default function EnterpriseDetailPage() {
     return `Model outlook is positive: risk at ${riskPct}% with net +${netJobs} jobs over 3 months.`;
   }, [enterprise]);
 
+  const aiInsights = useMemo<AiInsight[]>(() => {
+    if (!data || !enterprise || !context) {
+      return [
+        {
+          id: "profile-loading",
+          title: "Profile intelligence",
+          narrative: "AI insights will appear once profile and loan context are available.",
+          confidence: 40,
+          tone: "neutral",
+        },
+      ];
+    }
+
+    const insightCards: AiInsight[] = data.insights.slice(0, 3).map((item, idx) => ({
+      id: `profile-insight-${idx}`,
+      title: item.title,
+      narrative: item.detail,
+      confidence: clampConfidence(item.confidence * 100),
+      tone: item.severity === "high" ? "danger" : item.severity === "medium" ? "warning" : "success",
+      evidence: [
+        `Risk score: ${(enterprise.risk_score_3m * 100).toFixed(1)}%`,
+        `High arrears loans: ${context.high_arrears_count}`,
+      ],
+      actions: [data.actions[0]?.action || "Review suggested action plan."],
+    }));
+
+    return insightCards;
+  }, [data, enterprise, context]);
+
+  const aiContext = useMemo(
+    () => ({
+      uniqueId,
+      enterprise,
+      portfolioContext: context,
+      topRelatedLoans: data?.related_loans?.slice(0, 80) || [],
+      insights: data?.insights || [],
+      actions: data?.actions || [],
+    }),
+    [uniqueId, enterprise, context, data?.related_loans, data?.insights, data?.actions]
+  );
+
+  const liveAi = useLiveAiInsights({
+    scopeType: "profile",
+    scopeId: uniqueId || null,
+    context: aiContext,
+    fallbackInsights: aiInsights,
+    enabled: Boolean(uniqueId),
+  });
+
   return (
     <RequireRole allow={["Admin", "Program Manager", "Advisor"]}>
       <div className="space-y-6">
@@ -249,6 +301,14 @@ export default function EnterpriseDetailPage() {
                 </div>
               </div>
             </section>
+
+            <InsightPanel
+              title="AI Insights"
+              subtitle="Entity-level narrative generated from profile metrics and related loan context."
+              status={liveAi.status}
+              lastUpdated={liveAi.lastUpdated}
+              insights={liveAi.insights}
+            />
 
             <section className="grid grid-cols-2 gap-3 lg:grid-cols-5">
               <KpiTile icon={<ShieldAlert size={16} />} label="Risk Score" value={`${Math.round(enterprise.risk_score_3m * 100)}%`} />

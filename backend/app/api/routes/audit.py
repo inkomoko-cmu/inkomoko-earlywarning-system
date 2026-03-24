@@ -6,7 +6,7 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, Query
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, text
 
 from app.core import audit as fallback_audit
 from app.crud.audit import get_audit_logs, get_counts
@@ -220,6 +220,135 @@ def _row_to_event(row: AuditLog) -> dict:
     }
 
 
+async def _audit_schema_caps(db) -> dict[str, bool]:
+    caps_sql = text(
+        """
+        SELECT
+            MAX(CASE WHEN column_name = 'meta' THEN 1 ELSE 0 END) AS has_meta,
+            MAX(CASE WHEN column_name = 'request_context' THEN 1 ELSE 0 END) AS has_request_context
+        FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'audit_log'
+        """
+    )
+    row = (await db.execute(caps_sql)).mappings().first()
+    return {
+        "has_meta": bool((row or {}).get("has_meta", 0)),
+        "has_request_context": bool((row or {}).get("has_request_context", 0)),
+    }
+
+
+async def _legacy_get_audit_logs(
+    db,
+    *,
+    source: Optional[str],
+    category: Optional[str],
+    severity: Optional[str],
+    search: Optional[str],
+    limit: int,
+    offset: int,
+    has_request_context: bool,
+) -> tuple[list[dict], int, dict[str, dict[str, int]]]:
+    where_clauses: list[str] = []
+    params: dict[str, object] = {"limit": limit, "offset": offset}
+
+    if category:
+        where_clauses.append("category = :category")
+        params["category"] = category
+    if severity:
+        where_clauses.append("severity = :severity")
+        params["severity"] = severity
+    if search:
+        where_clauses.append("(action ILIKE :q OR details ILIKE :q OR actor ILIKE :q)")
+        params["q"] = f"%{search}%"
+
+    if source:
+        if has_request_context:
+            where_clauses.append("COALESCE(request_context->>'source', 'backend') = :source")
+            params["source"] = source
+        elif source != "backend":
+            return [], 0, {
+                "category_counts": {},
+                "severity_counts": {},
+                "source_counts": {},
+            }
+
+    where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+
+    total_sql = text(f"SELECT COUNT(*) AS total FROM audit_log {where_sql}")
+    total = int((await db.execute(total_sql, params)).scalar() or 0)
+
+    logs_sql = text(
+        f"""
+        SELECT
+            audit_id,
+            created_at,
+            action,
+            category,
+            severity,
+            actor,
+            details,
+            {'request_context' if has_request_context else "'{}'::jsonb AS request_context"}
+        FROM audit_log
+        {where_sql}
+        ORDER BY created_at DESC
+        OFFSET :offset
+        LIMIT :limit
+        """
+    )
+    rows = (await db.execute(logs_sql, params)).mappings().all()
+
+    cat_rows = (await db.execute(text("SELECT category, COUNT(*) AS c FROM audit_log GROUP BY category"))).all()
+    sev_rows = (await db.execute(text("SELECT severity, COUNT(*) AS c FROM audit_log GROUP BY severity"))).all()
+
+    if has_request_context:
+        src_rows = (
+            await db.execute(
+                text(
+                    """
+                    SELECT COALESCE(request_context->>'source', 'backend') AS source, COUNT(*) AS c
+                    FROM audit_log
+                    GROUP BY COALESCE(request_context->>'source', 'backend')
+                    """
+                )
+            )
+        ).all()
+        source_counts = {r[0]: int(r[1]) for r in src_rows}
+    else:
+        source_counts = {"backend": total}
+
+    counts = {
+        "category_counts": {r[0]: int(r[1]) for r in cat_rows},
+        "severity_counts": {r[0]: int(r[1]) for r in sev_rows},
+        "source_counts": source_counts,
+    }
+
+    events = []
+    for row in rows:
+        request_context = row.get("request_context") or {}
+        event_source = (
+            request_context.get("source")
+            if isinstance(request_context, dict)
+            else "backend"
+        ) or "backend"
+        created_at = row.get("created_at")
+        events.append(
+            {
+                "id": str(row.get("audit_id")),
+                "timestamp": created_at.isoformat() if created_at else datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                "source": event_source,
+                "action": row.get("action") or "",
+                "category": row.get("category") or "system",
+                "severity": row.get("severity") or "info",
+                "actor": row.get("actor") or "system",
+                "details": row.get("details") or "",
+                "meta": {},
+            }
+        )
+
+    return events, total, counts
+
+
 @router.get("/logs", summary="Aggregated audit log (Postgres-backed)")
 async def get_audit_logs_endpoint(
     source: Optional[str] = Query(default=None, description="backend | ml | governance"),
@@ -231,6 +360,29 @@ async def get_audit_logs_endpoint(
 ):
     try:
         async with _build_engine()() as db:
+            caps = await _audit_schema_caps(db)
+
+            if not caps["has_meta"]:
+                events, total, counts = await _legacy_get_audit_logs(
+                    db,
+                    source=source,
+                    category=category,
+                    severity=severity,
+                    search=search,
+                    limit=limit,
+                    offset=offset,
+                    has_request_context=caps["has_request_context"],
+                )
+                return {
+                    "total": total,
+                    "offset": offset,
+                    "limit": limit,
+                    "page_count": len(events),
+                    **counts,
+                    "ml_available": False,
+                    "events": events,
+                }
+
             await _ensure_governance_seed(db)
 
             ml_events = []

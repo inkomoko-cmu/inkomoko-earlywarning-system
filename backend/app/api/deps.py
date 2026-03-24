@@ -100,3 +100,39 @@ def require_scope(country_code: str | None = None, program_id=None, cohort_id=No
         return user, roles
 
     return _guard
+
+
+async def get_scope_country_codes(current, db: AsyncSession):
+    """Return allowed country codes for a user, or None for admin/unrestricted."""
+    user, roles = current
+    if "admin" in roles:
+        return None
+
+    scopes = await get_user_scopes(db, user.user_id)
+    if not scopes:
+        raise HTTPException(status_code=403, detail="No scope assigned")
+
+    country_codes = {s.country_code for s in scopes if s.country_code}
+    return country_codes or None
+
+
+async def enforce_country_scope(
+    current,
+    db: AsyncSession,
+    requested_country_code: str | None,
+):
+    """Validate requested country against scope and return effective filter."""
+    allowed = await get_scope_country_codes(current, db)
+    if allowed is None:
+        return requested_country_code
+
+    if requested_country_code is not None and requested_country_code not in allowed:
+        raise HTTPException(status_code=403, detail="Out of scope")
+
+    if requested_country_code is not None:
+        return requested_country_code
+
+    if len(allowed) == 1:
+        return next(iter(allowed))
+
+    return None

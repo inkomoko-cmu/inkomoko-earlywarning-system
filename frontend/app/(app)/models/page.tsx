@@ -1,12 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardDescription, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { InsightPanel } from "@/components/ui/InsightPanel";
 import { BrainCircuit, Download, Loader2, AlertCircle } from "lucide-react";
 import { RequireRole } from "@/components/auth/RequireRole";
-import { apiFetch, BASE } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
+import { type AiInsight, clampConfidence } from "@/lib/insights";
+import { useLiveAiInsights } from "@/lib/useLiveAiInsights";
 
 type MetricInterpretation = {
   excellent: number;
@@ -140,18 +143,7 @@ export default function ModelsPage() {
     setLoading(true);
     setError(null);
     try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(`${BASE}/ml/model-cards`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch model cards: ${response.statusText}`);
-      }
-
-      const data = await response.json();
+      const data = await apiFetch<ModelCards>("/ml/model-cards", { method: "GET" }, true);
       setModelCards(data);
     } catch (err: any) {
       setError(err.message || "Failed to load model cards");
@@ -165,6 +157,72 @@ export default function ModelsPage() {
     // Simple export for now - can enhance later
     alert("PDF export feature coming soon!");
   };
+
+  const pipelines = useMemo(
+    () =>
+      modelCards
+        ? [
+            { key: "risk", data: modelCards.risk, color: "red" },
+            { key: "employment", data: modelCards.employment, color: "green" },
+            { key: "revenue", data: modelCards.revenue, color: "blue" },
+          ]
+        : [],
+    [modelCards]
+  );
+
+  const aiInsights = useMemo<AiInsight[]>(() => {
+    const totalModels = pipelines.reduce((acc, pipeline) => acc + (pipeline.data?.num_models || 0), 0);
+    const totalFeatures = pipelines.reduce((acc, pipeline) => acc + (pipeline.data?.feature_count || 0), 0);
+    const richestPipeline = pipelines
+      .slice()
+      .sort((a, b) => (b.data?.feature_count || 0) - (a.data?.feature_count || 0))[0];
+    if (!pipelines.length) return [];
+
+    const confidence = clampConfidence(60 + Math.min(20, totalModels));
+
+    return [
+      {
+        id: "models-coverage",
+        title: "Model coverage",
+        narrative: `${totalModels} production models are documented across risk, employment, and revenue pipelines.`,
+        confidence,
+        tone: totalModels >= 9 ? "success" : "warning",
+        evidence: pipelines.map((pipeline) => `${pipeline.data.pipeline}: ${pipeline.data.num_models} models`),
+        actions: ["Review pipeline cards for horizon-level behavior and caveats."],
+      },
+      {
+        id: "models-feature-depth",
+        title: "Feature depth",
+        narrative: `${totalFeatures} total engineered features are in play; ${richestPipeline?.data.pipeline || "Primary"} pipeline has the widest feature footprint.`,
+        confidence: clampConfidence(confidence + 6),
+        tone: "neutral",
+        evidence: [`Largest feature set: ${richestPipeline?.data.feature_count || 0}`],
+        actions: ["Prioritize monitoring on the highest-complexity pipeline."],
+      },
+      {
+        id: "models-governance",
+        title: "Governance readiness",
+        narrative: "Model cards expose metrics, feature signals, and hyperparameters, supporting transparent review before operational decisions.",
+        confidence: clampConfidence(72),
+        tone: "success",
+        actions: ["Pair model-card review with Data Quality and Audit pages for full traceability."],
+      },
+    ];
+  }, [pipelines]);
+
+  const aiContext = useMemo(
+    () => ({
+      pipelines,
+      modelCards,
+    }),
+    [pipelines, modelCards]
+  );
+
+  const liveAi = useLiveAiInsights({
+    scopeType: "models",
+    context: aiContext,
+    fallbackInsights: aiInsights,
+  });
 
   if (loading) {
     return (
@@ -217,11 +275,9 @@ export default function ModelsPage() {
     return null;
   }
 
-  const pipelines = [
-    { key: "risk", data: modelCards.risk, color: "red" },
-    { key: "employment", data: modelCards.employment, color: "green" },
-    { key: "revenue", data: modelCards.revenue, color: "blue" },
-  ];
+  const totalModels = pipelines.reduce((acc, pipeline) => acc + (pipeline.data?.num_models || 0), 0);
+  const totalFeatures = pipelines.reduce((acc, pipeline) => acc + (pipeline.data?.feature_count || 0), 0);
+  const avgFeaturesPerPipeline = pipelines.length ? Math.round(totalFeatures / pipelines.length) : 0;
 
   return (
     <RequireRole allow={["Admin", "Program Manager"]}>
@@ -238,6 +294,33 @@ export default function ModelsPage() {
           <Button className="gap-2" onClick={exportPDF}>
             <Download size={16} /> Export PDF
           </Button>
+        </div>
+
+        <InsightPanel
+          title="AI Insights"
+          subtitle="Narrative interpretation generated from current model-card metadata."
+          status={liveAi.status}
+          lastUpdated={liveAi.lastUpdated}
+          insights={liveAi.insights}
+        />
+
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-2xl border border-inkomoko-border bg-white p-4 shadow-sm">
+            <div className="text-xs uppercase tracking-wide text-inkomoko-muted">Pipelines</div>
+            <div className="mt-1 text-2xl font-semibold text-inkomoko-text">{pipelines.length}</div>
+          </div>
+          <div className="rounded-2xl border border-inkomoko-border bg-white p-4 shadow-sm">
+            <div className="text-xs uppercase tracking-wide text-inkomoko-muted">Total Models</div>
+            <div className="mt-1 text-2xl font-semibold text-inkomoko-text">{totalModels}</div>
+          </div>
+          <div className="rounded-2xl border border-inkomoko-border bg-white p-4 shadow-sm">
+            <div className="text-xs uppercase tracking-wide text-inkomoko-muted">Total Features</div>
+            <div className="mt-1 text-2xl font-semibold text-inkomoko-text">{totalFeatures}</div>
+          </div>
+          <div className="rounded-2xl border border-inkomoko-border bg-white p-4 shadow-sm">
+            <div className="text-xs uppercase tracking-wide text-inkomoko-muted">Avg Features/Pipeline</div>
+            <div className="mt-1 text-2xl font-semibold text-inkomoko-text">{avgFeaturesPerPipeline}</div>
+          </div>
         </div>
 
         <div className="space-y-6">

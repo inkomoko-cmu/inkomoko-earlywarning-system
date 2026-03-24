@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Printer, Shield, AlertTriangle,
   Info, TrendingUp, Users, BarChart2, Lightbulb, FileBarChart,
@@ -10,6 +10,9 @@ import {
 import { RequireRole } from "@/components/auth/RequireRole";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
+import { InsightPanel } from "@/components/ui/InsightPanel";
+import { type AiInsight, clampConfidence } from "@/lib/insights";
+import { useLiveAiInsights } from "@/lib/useLiveAiInsights";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Prose helpers
@@ -1121,10 +1124,63 @@ const SECTIONS = [
 export default function DocsPage() {
   const [activeId, setActiveId] = useState("overview");
   const current = SECTIONS.find(s => s.id === activeId) ?? SECTIONS[0];
+  const aiInsights = useMemo<AiInsight[]>(() => {
+    return [
+      {
+        id: "docs-focus",
+        title: "Current documentation focus",
+        narrative: `You are viewing ${current.label}, which aligns implementation guidance to the active operational workflow.`,
+        confidence: clampConfidence(76),
+        tone: "neutral",
+        actions: ["Use this section as the authoritative reference during review and onboarding."],
+      },
+      {
+        id: "docs-coverage",
+        title: "Coverage completeness",
+        narrative: `This documentation surface covers ${SECTIONS.length} core knowledge areas across architecture, prediction pipelines, advisory, and reporting.`,
+        confidence: clampConfidence(74),
+        tone: "success",
+        evidence: [SECTIONS.map((s) => s.label).join(" • ")],
+        actions: ["Keep section updates synchronized with product and policy changes."],
+      },
+      {
+        id: "docs-operational-note",
+        title: "Operational note",
+        narrative: "Consistent documentation quality reduces configuration drift and improves trust in AI-assisted decisions across teams.",
+        confidence: clampConfidence(70),
+        tone: "neutral",
+        actions: ["Review this page before release sign-off and governance meetings."],
+      },
+    ];
+  }, [current.label]);
+
+  const aiContext = useMemo(
+    () => ({
+      activeSection: current.id,
+      activeLabel: current.label,
+      sections: SECTIONS.map((section) => section.id),
+    }),
+    [current.id, current.label]
+  );
+
+  const liveAi = useLiveAiInsights({
+    scopeType: "docs",
+    scopeId: current.id,
+    context: aiContext,
+    fallbackInsights: aiInsights,
+  });
 
   return (
     <RequireRole allow={["Admin"]}>
       <div className="space-y-5">
+
+        <InsightPanel
+          title="AI Insights"
+          subtitle="Narrative interpretation of documentation focus and knowledge coverage."
+          status={liveAi.status}
+          lastUpdated={liveAi.lastUpdated}
+          insights={liveAi.insights}
+        />
 
         {/* ── Tab nav + Print ── */}
         <div className="rounded-2xl border border-inkomoko-border bg-white shadow-sm overflow-hidden">

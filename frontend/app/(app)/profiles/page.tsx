@@ -5,7 +5,10 @@ import Link from "next/link";
 import { RequireRole } from "@/components/auth/RequireRole";
 import { Badge } from "@/components/ui/Badge";
 import { ErrorCard } from "@/components/ui/ErrorCard";
+import { InsightPanel } from "@/components/ui/InsightPanel";
 import { apiFetch } from "@/lib/api";
+import { type AiInsight, clampConfidence } from "@/lib/insights";
+import { useLiveAiInsights } from "@/lib/useLiveAiInsights";
 import { Building2, Briefcase, DollarSign, Search, ShieldAlert, TrendingUp, Users } from "lucide-react";
 
 type RiskFilter = "All" | "High" | "Medium" | "Low";
@@ -113,6 +116,65 @@ export default function EnterpriseProfilesPage() {
     };
   }, [filtered]);
 
+  const aiInsights = useMemo<AiInsight[]>(() => {
+    const highRisk = filtered.filter((enterprise) => normalizeRiskTier(enterprise.risk_tier_3m) === "High").length;
+    const netJobs = summary.totalJobsCreated - summary.totalJobsLost;
+    const confidence = clampConfidence(50 + Math.min(35, filtered.length / 8));
+
+    return [
+      {
+        id: "profiles-risk-mix",
+        title: "Risk mix across visible enterprises",
+        narrative: `${highRisk.toLocaleString()} high-risk profiles out of ${summary.count.toLocaleString()} currently visible enterprises.`,
+        confidence,
+        tone: highRisk > Math.max(5, summary.count * 0.3) ? "warning" : "success",
+        evidence: [
+          `Filtered profiles: ${summary.count.toLocaleString()}`,
+          `High-risk count: ${highRisk.toLocaleString()}`,
+        ],
+        actions: ["Open high-risk profiles first for action planning."],
+      },
+      {
+        id: "profiles-impact",
+        title: "Projected impact snapshot",
+        narrative: `Projected revenue is ${formatMoney(summary.totalRevenue)} with net jobs ${netJobs >= 0 ? "+" : ""}${netJobs.toLocaleString()} in the selected profile set.`,
+        confidence: clampConfidence(55 + Math.min(20, countries.length * 4)),
+        tone: netJobs < 0 ? "warning" : "success",
+        evidence: [
+          `Jobs created: ${summary.totalJobsCreated.toLocaleString()}`,
+          `Jobs lost: ${summary.totalJobsLost.toLocaleString()}`,
+        ],
+        actions: ["Combine country and risk filters to isolate intervention cohorts."],
+      },
+      {
+        id: "profiles-operating-note",
+        title: "Advisor operating note",
+        narrative: "Insight confidence improves with broader filtered coverage; narrow slices are directional and should be validated against enterprise detail context.",
+        confidence: clampConfidence(45 + Math.min(35, summary.count / 5)),
+        tone: "neutral",
+        evidence: [`Countries in filter: ${countries.length - 1}`],
+        actions: ["Use enterprise detail pages for decision-critical cases."],
+      },
+    ];
+  }, [filtered, summary, countries.length]);
+
+  const aiContext = useMemo(
+    () => ({
+      summary,
+      filters: { country, risk, search: deferredSearch },
+      visibleProfiles: visibleProfiles.slice(0, 120),
+      totalFiltered: filtered.length,
+      totalRows: rows.length,
+    }),
+    [summary, country, risk, deferredSearch, visibleProfiles, filtered.length, rows.length]
+  );
+
+  const liveAi = useLiveAiInsights({
+    scopeType: "profiles",
+    context: aiContext,
+    fallbackInsights: aiInsights,
+  });
+
   return (
     <RequireRole allow={["Admin", "Program Manager", "Advisor"]}>
       <div className="space-y-8">
@@ -140,6 +202,14 @@ export default function EnterpriseProfilesPage() {
             onRetry={() => loadProfiles(true)}
           />
         )}
+
+        <InsightPanel
+          title="AI Insights"
+          subtitle="Narrative summaries generated from the currently filtered profile universe."
+          status={liveAi.status}
+          lastUpdated={liveAi.lastUpdated}
+          insights={liveAi.insights}
+        />
 
         <section className="rounded-2xl border border-inkomoko-border bg-white p-5 shadow-card">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
@@ -228,7 +298,7 @@ export default function EnterpriseProfilesPage() {
               </div>
 
               <div className="mt-4 text-sm font-semibold text-inkomoko-blue transition-colors group-hover:text-inkomoko-blueSoft">
-                Open full profile ->
+                Open full profile &rarr;
               </div>
             </article>
             </Link>

@@ -10,8 +10,11 @@ import {
 import { RequireRole } from "@/components/auth/RequireRole";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
+import { InsightPanel } from "@/components/ui/InsightPanel";
 import { exportPDF } from "@/lib/export";
 import { apiFetch } from "@/lib/api";
+import { type AiInsight, clampConfidence } from "@/lib/insights";
+import { useLiveAiInsights } from "@/lib/useLiveAiInsights";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 type Source = "governance" | "backend" | "ml";
@@ -167,6 +170,82 @@ export default function AuditPage() {
   const backendCount = liveEvents.filter(e => e.source === "backend").length;
   const mlCount = liveEvents.filter(e => e.source === "ml").length;
   const governanceCount = liveEvents.filter(e => e.source === "governance").length;
+  const criticalErrors = allEvents.filter(e => e.severity === "critical" || e.severity === "error").length;
+
+  const aiInsights = useMemo<AiInsight[]>(() => {
+    const riskRatio = allEvents.length > 0 ? totalWarnings / allEvents.length : 0;
+    return [
+      {
+        id: "audit-risk",
+        title: "Control pressure",
+        narrative: `${totalWarnings} of ${allEvents.length} events are warning-or-higher, with ${criticalErrors} errors/critical incidents requiring closer review.`,
+        confidence: clampConfidence(58 + (1 - riskRatio) * 25),
+        tone: criticalErrors > 0 ? "danger" : totalWarnings > 0 ? "warning" : "success",
+        evidence: [
+          `Warning+ ratio: ${(riskRatio * 100).toFixed(1)}%`,
+          `Critical/Error count: ${criticalErrors}`,
+        ],
+        actions: ["Escalate recurring critical actions into a weekly governance checkpoint."],
+      },
+      {
+        id: "audit-source-mix",
+        title: "Source observability",
+        narrative: `Event coverage currently spans Governance (${governanceCount}), Backend (${backendCount}), and ML (${mlAvailable ? mlCount : 0}).`,
+        confidence: clampConfidence(mlAvailable ? 78 : 62),
+        tone: mlAvailable ? "neutral" : "warning",
+        evidence: [mlAvailable ? "ML telemetry online" : "ML telemetry offline"],
+        actions: ["Maintain balanced telemetry to avoid blind spots in incident root-cause analysis."],
+      },
+      {
+        id: "audit-filtered-view",
+        title: "Current analytical view",
+        narrative: `The active filters surface ${filtered.length} events across ${totalPages} page(s), focused for targeted forensic review.`,
+        confidence: clampConfidence(70),
+        tone: "neutral",
+        actions: ["Export filtered evidence pack before governance and donor review sessions."],
+      },
+    ];
+  }, [allEvents.length, backendCount, criticalErrors, filtered.length, governanceCount, mlAvailable, mlCount, totalPages, totalWarnings]);
+
+  const aiContext = useMemo(
+    () => ({
+      summary: {
+        allEvents: allEvents.length,
+        totalWarnings,
+        criticalErrors,
+        backendCount,
+        governanceCount,
+        mlCount: mlAvailable ? mlCount : 0,
+      },
+      filters: {
+        sourceFilter,
+        categoryFilter,
+        severityFilter,
+        search,
+      },
+      filteredSample: filtered.slice(0, 200),
+    }),
+    [
+      allEvents.length,
+      totalWarnings,
+      criticalErrors,
+      backendCount,
+      governanceCount,
+      mlAvailable,
+      mlCount,
+      sourceFilter,
+      categoryFilter,
+      severityFilter,
+      search,
+      filtered,
+    ]
+  );
+
+  const liveAi = useLiveAiInsights({
+    scopeType: "audit",
+    context: aiContext,
+    fallbackInsights: aiInsights,
+  });
 
   // Reset page on filter change
   useEffect(() => { setPage(0); }, [sourceFilter, categoryFilter, severityFilter, search]);
@@ -327,6 +406,14 @@ export default function AuditPage() {
             <XCircle size={16} /> {error}
           </div>
         )}
+
+        <InsightPanel
+          title="AI Insights"
+          subtitle="Narrative interpretation of current audit activity and control signals."
+          status={liveAi.status}
+          lastUpdated={liveAi.lastUpdated}
+          insights={liveAi.insights}
+        />
 
         {/* ── Table ── */}
         <div className="rounded-2xl border border-inkomoko-border bg-white shadow-sm overflow-hidden">

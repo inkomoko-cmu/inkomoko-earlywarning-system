@@ -12,18 +12,29 @@ It is built with **FastAPI + PostgreSQL** and implements:
 - Admin-managed user provisioning
 - Backend-enforced authorization (frontend is only a UI layer)
 
+Portfolio analytics APIs now include executive dashboard endpoints:
+
+- `GET /portfolio/overview`
+- `GET /portfolio/risk-distribution`
+- `GET /portfolio/trends?months=...`
+- `GET /portfolio/by-country`
+- `GET /portfolio/by-sector`
+- `GET /portfolio/sector-risk-summary`
+- `GET /portfolio/country-comparison`
+- `GET /portfolio/anomaly-signals`
+
 ---
 
 ## 1. Architecture Overview
 
 ### Core concepts
 
-| Concept | Description |
-|------|------------|
-| **User** | A person who can log in (`auth_user`) |
-| **Role** | What the user can do (Admin, Program Manager, Advisor, Donor) |
-| **Scope** | Which country’s data a user can access |
-| **JWT Token** | Short-lived access token proving authentication |
+| Concept       | Description                                                   |
+| ------------- | ------------------------------------------------------------- |
+| **User**      | A person who can log in (`auth_user`)                         |
+| **Role**      | What the user can do (Admin, Program Manager, Advisor, Donor) |
+| **Scope**     | Which country’s data a user can access                        |
+| **JWT Token** | Short-lived access token proving authentication               |
 
 All authorization decisions are enforced **server-side**.
 
@@ -42,9 +53,10 @@ All authorization decisions are enforced **server-side**.
 
 ```bash
 cd backend
-conda create -n inkomoko-backend 
+conda create -n inkomoko-backend
 conda activate inkomoko-backend
 pip install -r requirements.txt
+```
 ````
 
 ---
@@ -84,16 +96,17 @@ psql -U postgres -d inkomoko_early_warning -f ..\db\01_schema.sql
 
 This creates:
 
-* `auth_user`
-* `auth_role`
-* `auth_user_role`
-* `auth_scope`
-* `ref_country`
-* supporting lookup tables
+- `auth_user`
+- `auth_role`
+- `auth_user_role`
+- `auth_scope`
+- `ref_country`
+- supporting lookup tables
 
 ---
 
 ### 5.2 Seed roles (one-time)
+
 psql -U postgres -d inkomoko_early_warning
 
 ```sql
@@ -134,11 +147,11 @@ Health check:
 ```
 GET http://192.198.1.107:8000/health
 ```
+
 other imports maybe requested:
+
 - pip install passlib[bcrypt]
 - pip install email-validator
-
-
 
 ---
 
@@ -188,10 +201,10 @@ Response:
 }
 ```
 
-* Tokens are **temporary**
-* Tokens are **not stored** in the database
-* Tokens are **generated on every login**
-* Tokens are **stored by the frontend automatically**
+- Tokens are **temporary**
+- Tokens are **not stored** in the database
+- Tokens are **generated on every login**
+- Tokens are **stored by the frontend automatically**
 
 ---
 
@@ -226,10 +239,10 @@ Authorization: Bearer <admin_token>
 
 Supported roles:
 
-* `admin`
-* `program_manager`
-* `advisor`
-* `donor`
+- `admin`
+- `program_manager`
+- `advisor`
+- `donor`
 
 ---
 
@@ -244,7 +257,7 @@ VALUES ('<user_uuid>', 'RW');
 
 Without scope:
 
-* Requests return **403 Out of scope**
+- Requests return **403 Out of scope**
 
 ---
 
@@ -252,13 +265,12 @@ Without scope:
 
 ### Roles
 
-| Role            |    Access                                      |
+| Role            | Access                                         |
 | --------------- | ---------------------------------------------- |
 | Admin           | Full access                                    |
 | Program Manager | Portfolio, Scenarios, Models, Reports (scoped) |
 | Advisor         | Advisory, Portfolio (scoped)                   |
 | Donor           | Reports only                                   |
-
 
 ### Scope example
 
@@ -266,14 +278,14 @@ Without scope:
 GET /data/kpis/country_code=RW
 ```
 
-* Allowed only if user is scoped to `RW`
-* Otherwise returns **403 Out of scope**
+- Allowed only if user is scoped to `RW`
+- Otherwise returns **403 Out of scope**
 
 Backend enforcement **cannot be bypassed** by frontend navigation.
 
 ---
 
-## 11. 
+## 11.
 
 ---
 
@@ -298,13 +310,28 @@ donor@example.com
 
 This backend guarantees:
 
-* Secure authentication
-* Backend-enforced RBAC
-* Country-level data protection
-* Admin-controlled user lifecycle
-* Frontend-independent authorization
+- Secure authentication
+- Backend-enforced RBAC
+- Country-level data protection
+- Admin-controlled user lifecycle
+- Frontend-independent authorization
 
 This setup is **production-grade by design**, even when running with demo data.
 
+---
+
+## 14. Executive Dashboard Contract Checks
+
+Run these smoke checks after backend updates:
+
+```bash
+curl -H "Authorization: Bearer <token>" http://127.0.0.1:8000/portfolio/overview
+curl -H "Authorization: Bearer <token>" "http://127.0.0.1:8000/portfolio/trends?months=12"
+curl -H "Authorization: Bearer <token>" http://127.0.0.1:8000/portfolio/country-comparison
+curl -H "Authorization: Bearer <token>" "http://127.0.0.1:8000/portfolio/sector-risk-summary?limit=12"
+curl -H "Authorization: Bearer <token>" http://127.0.0.1:8000/portfolio/anomaly-signals
 ```
+
+```
+
 ```

@@ -9,14 +9,17 @@ from app.api.routes.ml import router as ml_router
 from app.api.routes.audit import router as audit_router
 from app.api.routes.settings import router as settings_router
 from app.api.routes.scenarios import router as scenarios_router
+from app.api.routes.ai_insights import router as ai_insights_router
 from fastapi import Request
 
 from app.core.config import settings
 from app.api.routes.auth import router as auth_router
 from app.api.routes.users import router as users_router
 from app.ml import load_models
-from app.db.bootstrap import ensure_settings_tables
+from app.db.bootstrap import ensure_settings_tables, ensure_ai_insights_tables
+from app.core.ai_insights_worker import run_ai_worker_loop
 import logging
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -32,13 +35,33 @@ async def lifespan(app: FastAPI):
         logger.warning(f"⚠️ Settings bootstrap failed: {e}")
 
     try:
+        await ensure_ai_insights_tables()
+        logger.info("✅ AI insights table bootstrap complete")
+    except Exception as e:
+        logger.warning(f"⚠️ AI insights bootstrap failed: {e}")
+
+    try:
         load_models()
         logger.info("✅ ML models loaded successfully")
     except Exception as e:
         logger.warning(f"⚠️ Could not load ML models: {e}")
         logger.warning("Models may need training. Run POST /ml/train")
 
+    stop_event = asyncio.Event()
+    worker_task = None
+    if settings.LLM_ENABLED:
+        worker_task = asyncio.create_task(run_ai_worker_loop(stop_event))
+        logger.info("✅ AI insights worker started")
+
     yield
+
+    if worker_task:
+        stop_event.set()
+        worker_task.cancel()
+        try:
+            await worker_task
+        except asyncio.CancelledError:
+            pass
 
     logger.info("🛑 Shutting down")
 
@@ -72,6 +95,7 @@ app.include_router(ml_router)
 app.include_router(audit_router)
 app.include_router(settings_router)
 app.include_router(scenarios_router)
+app.include_router(ai_insights_router)
 
 
 @app.get("/debug/token")

@@ -13,8 +13,10 @@ import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, require_roles
+from app.api.deps import get_current_user, require_roles, get_db
 from app.ml import get_registry, models_are_loaded
 from app.ml.config import RISK_LABELS, HORIZONS
 from app.ml.preprocessing import align_features
@@ -990,69 +992,74 @@ def _evaluate_contracts(df: pd.DataFrame) -> Dict:
 
 
 @router.get("/data-quality")
-async def get_data_quality():
+async def get_data_quality(db: AsyncSession = Depends(get_db)):
     """
-    Run data quality contracts against synthetic test data.
+        Run data quality contracts against curated anonymized data in Postgres.
     Returns column-level profiling, contract violations, and quality score.
     No authentication required - frontend handles access control.
     """
     try:
-        # Use synthetic test data from predictions directory
-        test_csv = ML_DIR / "synthetic_outputs" / "test.csv"
-        if not test_csv.exists():
-            # Fallback to acceptance_test.csv
-            test_csv = ML_DIR / "synthetic_outputs" / "acceptance_test.csv"
+        dq_sql = text(
+            """
+            WITH latest_loan AS (
+                SELECT *
+                FROM (
+                    SELECT
+                        i.*,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY i.client_id
+                            ORDER BY i.disbursement_date DESC NULLS LAST, i.loan_number
+                        ) AS rn
+                    FROM vw_anon_investment_curated i
+                ) ranked
+                WHERE rn = 1
+            )
+            SELECT
+                imp.unique_id,
+                imp.survey_date,
+                imp.country_code,
+                NULL::numeric AS age,
+                NULL::text AS gender,
+                imp.nationality,
+                imp.education_level,
+                imp.revenue::numeric AS revenue,
+                NULL::numeric AS hh_expense,
+                NULL::numeric AS monthly_customer,
+                imp.jobs_created_3m::numeric AS job_created,
+                imp.business_sector,
+                imp.business_sub_sector,
+                imp.client_location,
+                NULL::text AS is_business_registered,
+                NULL::text AS kept_sales_record,
+                NULL::text AS has_access_to_finance_in_past_6months,
+                NULL::text AS have_bank_account,
+                loan.disbursed_amount::numeric AS "disbursedAmount",
+                loan.current_balance::numeric AS "currentBalance",
+                loan.days_in_arrears::numeric AS "daysInArrears",
+                CASE
+                    WHEN COALESCE(loan.disbursed_amount, 0) = 0 THEN NULL
+                    ELSE COALESCE(loan.actual_payment_amount, 0) / NULLIF(loan.disbursed_amount, 0)
+                END::numeric AS repayment_ratio,
+                (
+                    CASE WHEN imp.nps_promoter THEN 1 ELSE 0 END
+                    - CASE WHEN imp.nps_detractor THEN 1 ELSE 0 END
+                )::numeric AS nps_net,
+                NULL::text AS survey_name,
+                NULL::numeric AS revenue_to_expense_ratio
+            FROM vw_anon_impact_curated imp
+            LEFT JOIN latest_loan loan ON loan.client_id = imp.client_id
+            ORDER BY imp.survey_date DESC NULLS LAST
+            LIMIT 5000
+            """
+        )
 
-        if not test_csv.exists():
-            # Final fallback to any CSV in synthetic_outputs
-            synthetic_dir = ML_DIR / "synthetic_outputs"
-            if synthetic_dir.exists():
-                csv_files = list(synthetic_dir.glob("*.csv"))
-                # Filter out Zone.Identifier files
-                csv_files = [
-                    f for f in csv_files if not f.name.endswith("Zone.Identifier")
-                ]
-                if csv_files:
-                    test_csv = csv_files[0]
-                else:
-                    raise FileNotFoundError(
-                        "No CSV files found in synthetic_outputs directory"
-                    )
-            else:
-                raise FileNotFoundError("Synthetic outputs directory not found")
+        rows = (await db.execute(dq_sql)).mappings().all()
+        df = pd.DataFrame(rows)
 
-        df = pd.read_csv(test_csv)
         result = _evaluate_contracts(df)
-        result["source"] = test_csv.name
+        result["source"] = "vw_anon_impact_curated + vw_anon_investment_curated"
 
         return JSONResponse(content=result)
-
-    except FileNotFoundError as e:
-        logger.warning(f"Test data not found: {e}")
-        # Return empty result with message
-        return JSONResponse(
-            content={
-                "total_rows": 0,
-                "total_columns": 0,
-                "contracted_columns": len(_DATA_CONTRACTS),
-                "present_contracted": 0,
-                "missing_required": [],
-                "quality_score": 0,
-                "checks_passed": 0,
-                "checks_total": 0,
-                "violations": [],
-                "violation_severity": {
-                    "critical": 0,
-                    "error": 0,
-                    "warning": 0,
-                    "info": 0,
-                },
-                "column_profiles": [],
-                "completeness_summary": [],
-                "source": "No test data available",
-                "error": str(e),
-            }
-        )
     except Exception as e:
         logger.error(f"Data quality check failed: {e}", exc_info=True)
         raise HTTPException(

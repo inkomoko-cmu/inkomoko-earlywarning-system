@@ -1,203 +1,148 @@
-# Reports Pipeline
+# Reports Page Documentation
 
 ## Purpose
 
-The **Reports** tab produces publication-ready report payloads that aggregate portfolio-wide predictions into structured documents suitable for external stakeholders. Two report formats are available:
+The Reports page produces publication-ready, stakeholder-oriented report views from portfolio analytics and early-warning signals. The current implementation supports four report modes:
 
-| Report Type       | Audience           | Depth                       |
-| ----------------- | ------------------ | --------------------------- |
-| **Donor Pack**    | Donors & investors | Comprehensive impact report |
-| **Program Brief** | Programme managers | Concise executive summary   |
+| Report Type       | Primary Audience                | Primary Focus                                               |
+| ----------------- | ------------------------------- | ----------------------------------------------------------- |
+| Donor Pack        | Donors and funding partners     | Impact narrative, risk transparency, graphics-rich overview |
+| Program Brief     | Program leadership              | Concise operational summary and action items                |
+| Risk Intervention | Advisors and portfolio managers | Prioritized risk hotspots and mitigation queue              |
+| Livelihood Impact | Impact and MEL teams            | Jobs and income protection outlook                          |
 
----
+## Current Frontend Generation Flow
 
-## API Endpoint
+The current Reports page generates report data from live portfolio endpoints and composes report payloads in the frontend. It does not expose a live/demo source toggle in the UI.
 
-```
-GET /demo/reports?report_type=donor_pack|program_brief&source=stored|test
-```
+### Data Inputs
 
-### Query Parameters
+- `GET /portfolio/overview`
+- `GET /portfolio/enterprises`
+- `GET /portfolio/by-sector`
+- `GET /portfolio/by-country`
+- `GET /portfolio/risk-distribution`
+- `GET /portfolio/trends?months=12`
 
-| Parameter     | Default      | Options                       | Description                             |
-| ------------- | ------------ | ----------------------------- | --------------------------------------- |
-| `report_type` | `donor_pack` | `donor_pack`, `program_brief` | Selects the report format               |
-| `source`      | `stored`     | `stored`, `test`              | Data source (uploaded data or test CSV) |
+These are combined into a single report object used by all report renderers.
 
----
+## Shared Report Object
 
-## Shared Response Fields
+All report types use a shared object shape:
 
-Both report types return the following top-level fields:
+- `report_type`
+- `generated_at`
+- `source`
+- `title`
+- `subtitle`
+- `executive_summary`
+- `kpis`
+- `horizon_summary`
+- `sector_breakdown`
+- `country_breakdown`
+- `gender_breakdown`
+- `program_breakdown`
+- `top_risk_enterprises`
+- `success_stories`
+- `action_items`
 
-| Field                  | Type   | Description                                        |
-| ---------------------- | ------ | -------------------------------------------------- |
-| `report_type`          | string | `donor_pack` or `program_brief`                    |
-| `generated_at`         | string | ISO 8601 UTC timestamp                             |
-| `source`               | string | Data filename used                                 |
-| `title`                | string | Human-readable report title                        |
-| `subtitle`             | string | Secondary title line                               |
-| `executive_summary`    | string | Auto-generated narrative summary                   |
-| `sections`             | array  | Ordered list of section keys the UI should render  |
-| `kpis`                 | object | Headline key performance indicators                |
-| `horizon_summary`      | object | Multi-horizon projections (3, 6, 12 months)        |
-| `sector_breakdown`     | array  | Per-sector aggregated metrics                      |
-| `country_breakdown`    | array  | Per-country aggregated metrics                     |
-| `gender_breakdown`     | object | Gender-disaggregated metrics                       |
-| `program_breakdown`    | array  | Per-programme aggregated metrics                   |
-| `top_risk_enterprises` | array  | Top 10 highest-risk enterprises                    |
-| `success_stories`      | array  | Top 5 lowest-risk enterprises (success spotlights) |
+## KPI Fields
 
----
+`kpis` includes:
 
-## Headline KPIs
+- `total_enterprises`
+- `avg_risk_score`
+- `high_risk_count`
+- `medium_risk_count`
+- `low_risk_count`
+- `tier_distribution` (`HIGH`, `MEDIUM`, `LOW`)
+- `total_projected_revenue`
+- `total_jobs_created`
+- `net_jobs`
 
-The `kpis` object contains:
+## Horizon Summary
 
-```json
-{
-  "total_enterprises": 200,
-  "unique_clients": 200,
-  "avg_risk_score": 0.4321,
-  "high_risk_count": 42,
-  "medium_risk_count": 88,
-  "low_risk_count": 70,
-  "tier_distribution": { "HIGH": 42, "MEDIUM": 88, "LOW": 70 },
-  "total_projected_revenue": 125000000,
-  "avg_projected_revenue": 625000,
-  "median_projected_revenue": 580000,
-  "total_jobs_created": 350,
-  "total_jobs_lost": 120,
-  "net_jobs": 230
-}
-```
+`horizon_summary` currently contains synthetic 1, 2, and 3 month views:
 
----
+- `"1"`
+- `"2"`
+- `"3"`
 
-## Multi-Horizon Projections
+Each horizon contains:
 
-The `horizon_summary` provides trend data across all three model horizons (3, 6, and 12 months):
+- `avg_risk_score`
+- `total_revenue`
+- `avg_revenue`
+- `jobs_created`
+- `jobs_lost`
+- `net_jobs`
 
-```json
-{
-  "3": {
-    "avg_risk_score": 0.43,
-    "total_revenue": 125000000,
-    "avg_revenue": 625000,
-    "jobs_created": 350,
-    "jobs_lost": 120,
-    "net_jobs": 230
-  },
-  "6": {
-    "avg_risk_score": 0.45,
-    "total_revenue": 260000000,
-    "avg_revenue": 1300000,
-    "jobs_created": 700,
-    "jobs_lost": 250,
-    "net_jobs": 450
-  },
-  "12": {
-    "avg_risk_score": 0.48,
-    "total_revenue": 540000000,
-    "avg_revenue": 2700000,
-    "jobs_created": 1400,
-    "jobs_lost": 520,
-    "net_jobs": 880
-  }
-}
-```
+## Report Type Details
 
-This enables donors and programme managers to see projected trajectory shifts over time.
+### Donor Pack
 
----
+Design: impact-forward with richer visuals.
 
-## Breakdowns
+Sections include:
 
-### Sector Breakdown
+1. Executive summary and donor takeaways
+2. Donor KPI dashboard
+3. Risk and horizon graphics
+4. Sector and country opportunity charts
+5. Detailed horizon snapshots
+6. Gender lens and programme sections (with explicit unavailable-state messaging where data is missing)
+7. Success spotlight
+8. Risk watchlist
+9. Methodology and donor caveats
 
-Each record includes: `sector`, `count`, `avg_risk`, `high_risk` count, `total_revenue`, `total_jobs_created`. Sorted by total revenue (descending).
+### Program Brief
 
-### Country Breakdown
+Sections include:
 
-Same structure as sector breakdown, grouped by country.
+1. Executive summary
+2. Portfolio snapshot
+3. Risk overview
+4. Action items
+5. Sector snapshot
+6. Horizon projection trends
 
-### Gender Breakdown
+### Risk Intervention
 
-Keyed by gender value (e.g., `"Male"`, `"Female"`), each entry includes `count`, `avg_risk`, `total_revenue`, `total_jobs`.
+Sections include:
 
-### Programme Breakdown
+1. Risk escalation snapshot
+2. Sector and country risk hotspot charts
+3. Intervention watchlist
+4. Recommended risk actions
 
-Grouped by `program_enrolled`, with the same metric structure.
+### Livelihood Impact
 
----
+Sections include:
 
-## Donor Pack Report
+1. Livelihood outcome snapshot
+2. Revenue/jobs trajectory chart
+3. Sector livelihood contribution chart
+4. Livelihood resilience spotlight
 
-**Title:** "Donor Impact Report"
+## Export Behavior
 
-Includes 12 sections:
+- Donor Pack uses a dedicated donor PDF export format with branded pages, visual stat cards, risk distribution graphics, horizon table, and action items.
+- Other report types currently use the generic table-based PDF export path.
 
-1. Executive Summary
-2. KPI Dashboard
-3. Risk Distribution
-4. Revenue Projections
-5. Employment Impact
-6. Sector Analysis
-7. Country Analysis
-8. Gender Lens
-9. Programme Performance
-10. Success Spotlight (top 5 lowest-risk enterprises)
-11. Risk Watchlist (top 10 highest-risk enterprises)
-12. Methodology
+## UI Behavior
 
-The executive summary auto-generates a narrative paragraph citing aggregate revenue projections, jobs safeguarded, high-risk counts, and resilience indicators.
+The Reports page currently allows users to:
 
----
+1. Select one of four report types via toggle buttons.
+2. Generate the selected report.
+3. Export the generated report to PDF.
+4. View an AI insights panel summarizing risk, livelihood, and revenue signals for the active report.
 
-## Program Brief Report
+## Notes on Data Completeness
 
-**Title:** "Program Brief"
+Some segment views can be empty in live portfolio mode, especially:
 
-Includes 6 sections:
+- `gender_breakdown`
+- `program_breakdown`
 
-1. Executive Summary
-2. KPI Summary
-3. Risk Overview
-4. Action Items
-5. Sector Snapshot
-6. Horizon Trends
-
-### Auto-Generated Action Items
-
-The Program Brief includes prioritised action items generated from the data:
-
-| Trigger Condition                        | Priority | Action                                          | Deadline       |
-| ---------------------------------------- | -------- | ----------------------------------------------- | -------------- |
-| Any high-risk enterprises exist          | CRITICAL | Schedule intervention reviews                   | Within 2 weeks |
-| Net jobs projection is negative          | HIGH     | Investigate layoff risk                         | Within 1 month |
-| High-risk percentage exceeds 30%         | HIGH     | Review admission criteria                       | Within 1 month |
-| Medium-risk count exceeds low-risk count | MEDIUM   | Increase mentoring frequency                    | Ongoing        |
-| Always included                          | LOW      | Run updated projections after next data refresh | Next quarter   |
-
----
-
-## UI Behaviour
-
-The Reports tab in the demo UI allows the user to:
-
-1. **Select report type** via a dropdown (Donor Pack / Program Brief).
-2. **Generate** the report, which renders headline KPIs, charts, breakdowns, and narrative sections.
-3. **Export to PDF** using the built-in html2pdf.js integration — produces a branded, publication-ready document.
-
----
-
-## Audit Trail
-
-Every report generation is logged:
-
-```
-Action:   Report generated: donor_pack
-Category: system
-Severity: info
-Details:  Generated donor_pack report for {N} enterprises.
-```
+When unavailable, the report now surfaces explicit messaging rather than silent omission.

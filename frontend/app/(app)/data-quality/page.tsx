@@ -1,13 +1,16 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardDescription, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { exportPDF } from "@/lib/export";
 import { Button } from "@/components/ui/Button";
+import { InsightPanel } from "@/components/ui/InsightPanel";
 import { ShieldCheck, Download, AlertCircle, CheckCircle, Info, XCircle } from "lucide-react";
 import { RequireRole } from "@/components/auth/RequireRole";
-import { BASE } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
+import { type AiInsight, clampConfidence } from "@/lib/insights";
+import { useLiveAiInsights } from "@/lib/useLiveAiInsights";
 
 interface ColumnProfile {
   column: string;
@@ -68,9 +71,7 @@ export default function DataQualityPage() {
     const fetchQualityData = async () => {
       try {
         setLoading(true);
-        const res = await fetch(`${BASE}/ml/data-quality`);
-        if (!res.ok) throw new Error(`Failed to fetch: ${res.status}`);
-        const data = await res.json();
+        const data = await apiFetch<DataQualityResult>("/ml/data-quality", { method: "GET" }, true);
         setQualityData(data);
         setError(null);
       } catch (err) {
@@ -117,6 +118,59 @@ export default function DataQualityPage() {
     }
   };
 
+  const aiInsights = useMemo<AiInsight[]>(() => {
+    if (!qualityData) return [];
+    const criticalAndError = (qualityData.violation_severity.critical || 0) + (qualityData.violation_severity.error || 0);
+    const missingRequired = qualityData.missing_required.length;
+    return [
+      {
+        id: "dq-health",
+        title: "Data quality health",
+        narrative: `Overall quality score is ${qualityData.quality_score}% with ${qualityData.checks_passed}/${qualityData.checks_total} checks passing.`,
+        confidence: clampConfidence(55 + qualityData.quality_score * 0.4),
+        tone: qualityData.quality_score >= 85 ? "success" : qualityData.quality_score >= 70 ? "warning" : "danger",
+        evidence: [
+          `Rows analyzed: ${qualityData.total_rows.toLocaleString()}`,
+          `Columns profiled: ${qualityData.total_columns}`,
+        ],
+        actions: ["Address critical contract breaches before model refresh cycles."],
+      },
+      {
+        id: "dq-contract-risk",
+        title: "Contract risk",
+        narrative: `${criticalAndError} critical/error violations and ${missingRequired} missing required fields are currently detected.`,
+        confidence: clampConfidence(60),
+        tone: criticalAndError > 0 || missingRequired > 0 ? "danger" : "success",
+        evidence: [
+          `Critical: ${qualityData.violation_severity.critical}`,
+          `Error: ${qualityData.violation_severity.error}`,
+        ],
+        actions: ["Prioritize fixes for required fields with highest downstream impact."],
+      },
+      {
+        id: "dq-operational-note",
+        title: "Operational note",
+        narrative: "Improving fill-rate and reducing severe violations will increase confidence in portfolio-level AI summaries.",
+        confidence: clampConfidence(68),
+        tone: "neutral",
+        actions: ["Track this page after each ingestion and retraining cycle."],
+      },
+    ];
+  }, [qualityData]);
+
+  const aiContext = useMemo(
+    () => ({
+      qualityData,
+    }),
+    [qualityData]
+  );
+
+  const liveAi = useLiveAiInsights({
+    scopeType: "data_quality",
+    context: aiContext,
+    fallbackInsights: aiInsights,
+  });
+
   if (loading) {
     return (
       <RequireRole allow={["Admin", "Program Manager"]}>
@@ -143,6 +197,11 @@ export default function DataQualityPage() {
 
   if (!qualityData) return null;
 
+  const criticalOrError = qualityData.violation_severity.critical + qualityData.violation_severity.error;
+  const avgFillRate = qualityData.column_profiles.length
+    ? (qualityData.column_profiles.reduce((sum, p) => sum + p.fill_rate, 0) / qualityData.column_profiles.length).toFixed(1)
+    : "0.0";
+
   return (
     <RequireRole allow={["Admin", "Program Manager"]}>
       <div className="space-y-6">
@@ -158,6 +217,33 @@ export default function DataQualityPage() {
           <Button className="gap-2" onClick={exportQuality}>
             <Download size={16} /> Export PDF
           </Button>
+        </div>
+
+        <InsightPanel
+          title="AI Insights"
+          subtitle="Narrative data-quality interpretation generated from current contract checks."
+          status={liveAi.status}
+          lastUpdated={liveAi.lastUpdated}
+          insights={liveAi.insights}
+        />
+
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-2xl border border-inkomoko-border bg-white p-4 shadow-sm">
+            <div className="text-xs uppercase tracking-wide text-inkomoko-muted">Quality Score</div>
+            <div className="mt-1 text-2xl font-semibold text-inkomoko-text">{qualityData.quality_score}%</div>
+          </div>
+          <div className="rounded-2xl border border-inkomoko-border bg-white p-4 shadow-sm">
+            <div className="text-xs uppercase tracking-wide text-inkomoko-muted">Checks Passed</div>
+            <div className="mt-1 text-2xl font-semibold text-inkomoko-text">{qualityData.checks_passed}/{qualityData.checks_total}</div>
+          </div>
+          <div className="rounded-2xl border border-inkomoko-border bg-white p-4 shadow-sm">
+            <div className="text-xs uppercase tracking-wide text-inkomoko-muted">Critical + Error</div>
+            <div className="mt-1 text-2xl font-semibold text-red-600">{criticalOrError}</div>
+          </div>
+          <div className="rounded-2xl border border-inkomoko-border bg-white p-4 shadow-sm">
+            <div className="text-xs uppercase tracking-wide text-inkomoko-muted">Average Fill Rate</div>
+            <div className="mt-1 text-2xl font-semibold text-inkomoko-text">{avgFillRate}%</div>
+          </div>
         </div>
 
         {/* Quality Score Ring & KPIs */}
