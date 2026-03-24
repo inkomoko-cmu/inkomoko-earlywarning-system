@@ -806,6 +806,66 @@ export default function ScenariosPage() {
 
   /* --- actions --------------------------------------------- */
 
+  const aiInsights = useMemo<AiInsight[]>(() => {
+    const highestDriver = sensitivity.slice().sort((a, b) => b.impact - a.impact)[0];
+    const revenueDeltaPct = summary.baseRevenue > 0
+      ? ((summary.stressedRevenue - summary.baseRevenue) / summary.baseRevenue) * 100
+      : 0;
+    const highRiskDelta = summary.stressedHigh - summary.baseHigh;
+    const confidence = clampConfidence(52 + Math.min(25, enterprises.length / 10));
+
+    return [
+      {
+        id: "scenario-dominant-driver",
+        title: "Dominant stress driver",
+        narrative: `${highestDriver?.driver || "Scenario"} is the strongest shock contributor at ${highestDriver?.impact || 0}% under ${s.name}.`,
+        confidence,
+        tone: (highestDriver?.impact || 0) >= 35 ? "warning" : "neutral",
+        evidence: sensitivity.map((item) => `${item.driver}: ${item.impact}%`).slice(0, 3),
+        actions: ["Prioritize mitigation actions for the dominant driver first."],
+      },
+      {
+        id: "scenario-risk-shift",
+        title: "Risk migration outlook",
+        narrative: `High-risk enterprises move from ${summary.baseHigh} to ${summary.stressedHigh} (${highRiskDelta >= 0 ? "+" : ""}${highRiskDelta}) in this simulation.`,
+        confidence: clampConfidence(confidence + 5),
+        tone: highRiskDelta > 0 ? "danger" : "success",
+        evidence: [`Baseline high-risk: ${summary.baseHigh}`, `Scenario high-risk: ${summary.stressedHigh}`],
+        actions: ["Allocate advisory capacity to the projected incremental high-risk group."],
+      },
+      {
+        id: "scenario-revenue-impact",
+        title: "Revenue impact",
+        narrative: `Projected revenue shifts by ${revenueDeltaPct.toFixed(1)}% relative to baseline over the modeled horizon.`,
+        confidence: clampConfidence(confidence + 3),
+        tone: revenueDeltaPct < -10 ? "warning" : "success",
+        evidence: [
+          `Baseline revenue: $${summary.baseRevenue.toLocaleString()}`,
+          `Scenario revenue: $${summary.stressedRevenue.toLocaleString()}`,
+        ],
+        actions: ["Use the sensitivity chart to sequence financial protection measures."],
+      },
+    ];
+  }, [s.name, sensitivity, summary, enterprises.length]);
+
+  const aiContext = useMemo(
+    () => ({
+      scenario: s,
+      summary,
+      sensitivity,
+      trajectory: chart,
+      enterpriseCount: enterprises.length,
+    }),
+    [s, summary, sensitivity, chart, enterprises.length]
+  );
+
+  const liveAi = useLiveAiInsights({
+    scopeType: "scenarios",
+    scopeId: s.name,
+    context: aiContext,
+    fallbackInsights: aiInsights,
+  });
+
   const exportScenario = () => {
     if (!selectedScenario) return;
     const p = selectedScenario.parameters;
@@ -1032,6 +1092,7 @@ export default function ScenariosPage() {
                 No scenarios available from the API. Create a scenario
                 to get started.
               </p>
+              {apiError && <p className="mt-2 text-xs text-red-600">{apiError}</p>}
             </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
