@@ -8,6 +8,7 @@ from app.api.routes.health import router as health_router
 from app.api.routes.ml import router as ml_router
 from app.api.routes.audit import router as audit_router
 from app.api.routes.settings import router as settings_router
+from app.api.routes.scenarios import router as scenarios_router
 from fastapi import Request
 
 from app.core.config import settings
@@ -70,6 +71,7 @@ app.include_router(health_router)
 app.include_router(ml_router)
 app.include_router(audit_router)
 app.include_router(settings_router)
+app.include_router(scenarios_router)
 
 
 @app.get("/debug/token")
