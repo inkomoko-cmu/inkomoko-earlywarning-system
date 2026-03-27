@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 from typing import Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 # ── Generic wrapper ─────────────────────────────────────────────────────────
 
 
 class PredictionMeta(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     model_pipeline: str
     record_count: int
 

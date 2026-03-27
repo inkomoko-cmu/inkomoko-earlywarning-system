@@ -5,6 +5,7 @@ import uuid
 from typing import Any
 
 from sqlalchemy import and_, desc, select, text, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.ai_insights import AiInsightJob, AiInsightSnapshot
@@ -113,7 +114,27 @@ async def enqueue_job_if_missing(
         requested_by=requested_by,
     )
     db.add(job)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        # Race-safe behavior: if another request enqueued the same active job first,
+        # return the existing queued/running job instead of bubbling a 500.
+        await db.rollback()
+        message = str(getattr(exc, "orig", exc))
+        if "uq_ai_jobs_active" not in message:
+            raise
+
+        existing = await get_active_job(
+            db,
+            scope_type=scope_type,
+            scope_id=scope_id,
+            context_hash=context_hash,
+            prompt_version=prompt_version,
+        )
+        if existing:
+            return existing
+        raise
+
     await db.refresh(job)
     return job
 

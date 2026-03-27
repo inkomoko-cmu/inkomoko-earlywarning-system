@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { exportCSV, exportExcel, exportPDF } from "@/lib/export";
 import { useAuth } from "@/components/auth/AuthProvider";
 import {
@@ -92,7 +92,7 @@ export default function OverviewPage() {
   const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState<string | null>(null);
 
-  const loadOverview = async (monthsBack = months) => {
+  const loadOverview = useCallback(async (monthsBack = months) => {
     try {
       setLoading(true);
       setApiError(null);
@@ -131,11 +131,11 @@ export default function OverviewPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [months]);
 
   useEffect(() => {
     loadOverview(months);
-  }, [months]);
+  }, [months, loadOverview]);
 
   const overview = dashboard?.overview;
 

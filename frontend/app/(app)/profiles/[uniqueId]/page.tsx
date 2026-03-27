@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { RequireRole } from "@/components/auth/RequireRole";
 import { Badge } from "@/components/ui/Badge";
@@ -121,7 +121,7 @@ export default function EnterpriseDetailPage() {
   const [visibleLoans, setVisibleLoans] = useState(LOAN_PAGE_SIZE);
   const requestVersion = useRef(0);
 
-  const loadDetail = async (forceRefresh = false) => {
+  const loadDetail = useCallback(async (forceRefresh = false) => {
     if (!uniqueId) return;
 
     const currentVersion = ++requestVersion.current;
@@ -146,14 +146,14 @@ export default function EnterpriseDetailPage() {
       if (currentVersion !== requestVersion.current) return;
       setLoading(false);
     }
-  };
+  }, [uniqueId]);
 
   useEffect(() => {
     loadDetail();
     return () => {
       requestVersion.current += 1;
     };
-  }, [uniqueId]);
+  }, [uniqueId, loadDetail]);
 
   useEffect(() => {
     setVisibleLoans(LOAN_PAGE_SIZE);

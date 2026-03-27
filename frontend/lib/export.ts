@@ -48,3 +48,60 @@ export function exportPDF(filename: string, title: string, rows: Record<string, 
 
   doc.save(`${filename}.pdf`);
 }
+
+type DonorPackPayload = {
+  title: string;
+  subtitle?: string;
+  generatedAt: string;
+  source?: string;
+  kpis: {
+    enterprises: number;
+    projectedRevenue: number;
+    netJobs: number;
+    avgRiskScore: number;
+    highRisk: number;
+    mediumRisk: number;
+    lowRisk: number;
+  };
+  takeaways: string[];
+  horizonData: Array<{
+    label: string;
+    totalRevenue: number;
+    netJobs: number;
+    avgRiskScore: number;
+  }>;
+  actionItems: Array<{ priority?: string; action?: string; deadline?: string }>;
+};
+
+export function exportDonorPackPDF(filename: string, payload: DonorPackPayload) {
+  const rows: Record<string, any>[] = [
+    { Section: "Report", Item: "Title", Value: payload.title },
+    { Section: "Report", Item: "Subtitle", Value: payload.subtitle ?? "" },
+    { Section: "Report", Item: "Generated", Value: new Date(payload.generatedAt).toLocaleString() },
+    { Section: "Report", Item: "Source", Value: payload.source ?? "" },
+    { Section: "KPIs", Item: "Enterprises", Value: payload.kpis.enterprises },
+    { Section: "KPIs", Item: "Projected Revenue", Value: payload.kpis.projectedRevenue },
+    { Section: "KPIs", Item: "Net Jobs", Value: payload.kpis.netJobs },
+    { Section: "KPIs", Item: "Average Risk Score", Value: payload.kpis.avgRiskScore },
+    { Section: "KPIs", Item: "High Risk", Value: payload.kpis.highRisk },
+    { Section: "KPIs", Item: "Medium Risk", Value: payload.kpis.mediumRisk },
+    { Section: "KPIs", Item: "Low Risk", Value: payload.kpis.lowRisk },
+    ...payload.takeaways.map((text, idx) => ({
+      Section: "Takeaways",
+      Item: `T${idx + 1}`,
+      Value: text,
+    })),
+    ...payload.horizonData.map((row) => ({
+      Section: "Horizon",
+      Item: row.label,
+      Value: `Revenue ${row.totalRevenue}, Net jobs ${row.netJobs}, Avg risk ${row.avgRiskScore}`,
+    })),
+    ...payload.actionItems.map((row, idx) => ({
+      Section: "Action",
+      Item: `${row.priority ?? ""} ${idx + 1}`.trim(),
+      Value: `${row.action ?? ""} ${row.deadline ? `(Due ${row.deadline})` : ""}`.trim(),
+    })),
+  ];
+
+  exportPDF(filename, payload.title, rows);
+}

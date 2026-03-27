@@ -10,6 +10,7 @@ from app.api.routes.audit import router as audit_router
 from app.api.routes.settings import router as settings_router
 from app.api.routes.scenarios import router as scenarios_router
 from app.api.routes.ai_insights import router as ai_insights_router
+from app.api.routes.upload import router as upload_router
 from fastapi import Request
 
 from app.core.config import settings
@@ -96,6 +97,7 @@ app.include_router(audit_router)
 app.include_router(settings_router)
 app.include_router(scenarios_router)
 app.include_router(ai_insights_router)
+app.include_router(upload_router)
 
 
 @app.get("/debug/token")

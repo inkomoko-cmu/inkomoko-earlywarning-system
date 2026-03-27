@@ -1,13 +1,22 @@
 from __future__ import annotations
 
+_HORIZON_SCALE = {
+    "1m": 0.33,
+    "3m": 1.0,
+    "6m": 1.8,
+    "12m": 3.0,
+}
 
-def _pressure(params: dict) -> float:
+
+def _pressure(params: dict, horizon: str = "3m") -> float:
     inflation = float(params.get("inflation", 0.0)) / 100.0
     fx = float(params.get("fxDepreciation", 0.0)) / 100.0
     funding = float(params.get("fundingCut", 0.0)) / 100.0
     conflict = float(params.get("conflictDisruption", 0.0)) / 100.0
     # Weighted deterministic pressure score.
-    return (inflation * 0.6) + (fx * 0.5) + (funding * 0.4) + (conflict * 0.5)
+    base = (inflation * 0.6) + (fx * 0.5) + (funding * 0.4) + (conflict * 0.5)
+    scale = _HORIZON_SCALE.get(horizon.strip().lower(), 1.0)
+    return base * scale
 
 
 def _clamp(value: float, low: float, high: float) -> float:
@@ -40,8 +49,9 @@ def simulate_target(
     baseline_value: float | None,
     baseline_label: str | None,
     scenario_params: dict,
+    horizon: str = "3m",
 ) -> tuple[float | None, float | None, str | None]:
-    pressure = _pressure(scenario_params)
+    pressure = _pressure(scenario_params, horizon)
     key = target_key.strip().lower()
 
     if key == "risk_tier":

@@ -270,12 +270,32 @@ def normalize_db_url(url: str) -> str:
     return url.replace("postgresql+asyncpg://", "postgresql://")
 
 
+def _read_env_value(env_path: Path, key: str) -> str | None:
+    if not env_path.exists():
+        return None
+    for raw_line in env_path.read_text(encoding="utf-8", errors="ignore").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, v = line.split("=", 1)
+        if k.strip() == key:
+            return v.strip().strip('"').strip("'")
+    return None
+
+
 def resolve_db_url() -> str:
     env_url = os.getenv("DATABASE_URL") or os.getenv("POSTGRES_URL")
     if env_url:
         return normalize_db_url(env_url)
 
     backend_dir = BASE.parent / "backend"
+    for env_candidate in (BASE.parent / ".env", backend_dir / ".env"):
+        file_url = _read_env_value(env_candidate, "DATABASE_URL") or _read_env_value(
+            env_candidate, "POSTGRES_URL"
+        )
+        if file_url:
+            return normalize_db_url(file_url)
+
     if backend_dir.exists():
         sys.path.insert(0, str(backend_dir))
         try:

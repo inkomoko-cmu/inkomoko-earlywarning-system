@@ -20,6 +20,104 @@ export type PortfolioOverview = {
   risk_trend: string;
 };
 
+export type RiskDistributionItem = {
+  label?: string;
+  name?: string;
+  count?: number;
+  value: number;
+  pct: number;
+};
+
+export type TrendPoint = {
+  month: string;
+  value: number;
+  upper_ci: number;
+  lower_ci: number;
+  n?: number;
+};
+
+export type TrendsResponse = {
+  revenue: TrendPoint[];
+  jobs_created: TrendPoint[];
+};
+
+export type CountryComparisonItem = {
+  country_code: string;
+  high_risk_pct: number;
+  total_outstanding: number;
+  par30_pct: number;
+  loans: number;
+  net_jobs_3m: number;
+};
+
+export type SectorRiskSummaryItem = {
+  sector: string;
+  enterprise_count: number;
+  high_risk_count: number;
+  medium_risk_count: number;
+  low_risk_count: number;
+};
+
+export type AnomalySignalItem = {
+  id: string;
+  title: string;
+  detail: string;
+  metric: string;
+  value: number;
+  threshold: number;
+  severity: "low" | "medium" | "high";
+};
+
+export type EnterpriseProfileItem = {
+  unique_id: string;
+  country_code: string | null;
+  business_sector: string | null;
+  risk_tier_3m: string | null;
+  risk_score_3m: number;
+  revenue_3m: number;
+  jobs_created_3m: number;
+  jobs_lost_3m: number;
+};
+
+export type CompositionSlice = {
+  label: string;
+  count: number;
+  pct: number;
+};
+
+export type PortfolioCompositionResponse = {
+  sectors: CompositionSlice[];
+  countries: CompositionSlice[];
+  risk_tiers: CompositionSlice[];
+};
+
+export type RiskMigrationItem = {
+  country_code: string;
+  upshift_count: number;
+  stable_count: number;
+  downshift_count: number;
+  high_risk_share_pct: number;
+};
+
+export type PerformanceDistributionItem = {
+  bucket: string;
+  count: number;
+  net_jobs_3m: number;
+};
+
+export type CorrelationDriverItem = {
+  driver: string;
+  correlation: number;
+};
+
+export type QualityOpsItem = {
+  metric: string;
+  value: number;
+  threshold: number;
+  status: string;
+  note: string;
+};
+
 type LegacyOverview = Partial<PortfolioOverview> & {
   jobs_created_3m?: number;
   jobs_lost_3m?: number;

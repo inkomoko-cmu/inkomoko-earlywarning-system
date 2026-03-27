@@ -191,7 +191,7 @@ function OverviewContent() {
         ]}
       />
       <Callout variant="tip">
-        If risk is LOW at 1m but HIGH at 3m, the client may be on a deteriorating path that isn't yet urgent
+        If risk is LOW at 1m but HIGH at 3m, the client may be on a deteriorating path that isn&#39;t yet urgent
         — a classic early warning signal. Always read trajectories, not just point estimates.
       </Callout>
 
@@ -199,7 +199,7 @@ function OverviewContent() {
       <OL>
         <Li><strong>Submit data</strong> — Client records are sent as JSON (manually entered, pasted, or uploaded from Excel/CSV).</Li>
         <Li><strong>Feature alignment</strong> — The app reindexes each record to the exact feature columns models were trained on. Missing columns are filled with null; extras are dropped.</Li>
-        <Li><strong>Model inference</strong> — For each pipeline, models at all three horizons run in parallel. Each model's scikit-learn pipeline transforms features (imputation, encoding, scaling) and generates predictions.</Li>
+        <Li><strong>Model inference</strong> — For each pipeline, models at all three horizons run in parallel. Each model&#39;s scikit-learn pipeline transforms features (imputation, encoding, scaling) and generates predictions.</Li>
         <Li><strong>Response</strong> — Results returned as structured JSON, rendered in the UI with sparkline trajectory charts.</Li>
       </OL>
 
@@ -276,7 +276,7 @@ function OverviewContent() {
         patterns, portfolio overview, advisory guidance, and data quality interpretation.
       </P>
       <Callout variant="info">
-        The RAG Agent is powered by retrieval-augmented generation backed by the system's own documentation and
+        The RAG Agent is powered by retrieval-augmented generation backed by the system&#39;s own documentation and
         the current dataset context. Insights are generated on demand and are not cached.
       </Callout>
 
@@ -454,7 +454,7 @@ function RiskContent() {
         <Li><strong>Time-based split:</strong> Training uses data up to a cutoff date; testing uses data after. No future data leaks into training.</Li>
         <Li><strong>Leakage column exclusion:</strong> Target variables, prediction columns, and key identifiers are explicitly stripped before the feature matrix is assembled.</Li>
         <Li><strong>Feature timestamp alignment:</strong> Loan snapshots are joined to survey records using the most recent state available at or before the survey date.</Li>
-        <Li><strong>Ordinal encoding:</strong> Uses <C>OrdinalEncoder</C> with unknown-value handling so unseen categories in inference don't crash the pipeline.</Li>
+        <Li><strong>Ordinal encoding:</strong> Uses <C>OrdinalEncoder</C> with unknown-value handling so unseen categories in inference don&#39;t crash the pipeline.</Li>
       </UL>
 
       <H2>Assumptions &amp; Caveats</H2>
@@ -462,7 +462,7 @@ function RiskContent() {
         <Li><C>risk_tier</C> values are normalized to <C>LOW</C>, <C>MEDIUM</C>, <C>HIGH</C> — the mapping <C>MID → MEDIUM</C> is applied automatically.</Li>
         <Li>Shorter horizons (1m) typically show lower error than longer-horizon (3m) forecasts. Check the Model Cards tab per-horizon for current metric values.</Li>
         <Li>Predictions are clipped to <C>[0, 1]</C> for scores — the raw regressor output is bounded as a post-processing step.</Li>
-        <Li>The pipeline was trained on synthetic data modelled after Inkomoko's client base. Production accuracy depends on how closely real data matches the training distribution.</Li>
+        <Li>The pipeline was trained on synthetic data modelled after Inkomoko&#39;s client base. Production accuracy depends on how closely real data matches the training distribution.</Li>
       </UL>
     </>
   );
@@ -481,7 +481,7 @@ function EmploymentContent() {
         Inkomoko-supported businesses at three monthly horizons, helping the organisation:
       </P>
       <UL>
-        <Li><strong>Track impact goals</strong> — Inkomoko's mission includes measurable job creation; monthly trajectory predictions show whether impact is accelerating or stalling.</Li>
+        <Li><strong>Track impact goals</strong> — Inkomoko&#39;s mission includes measurable job creation; monthly trajectory predictions show whether impact is accelerating or stalling.</Li>
         <Li><strong>Flag shrinking businesses</strong> — A spike in predicted job losses, especially one that grows across horizons, can signal deeper operational trouble before it appears in revenue or loan data.</Li>
         <Li><strong>Prioritise support</strong> — Businesses predicted to lose jobs may benefit from targeted capacity-building or market linkage interventions.</Li>
       </UL>
@@ -528,7 +528,7 @@ Content-Type: application/json
         ]}
       />
       <Callout variant="info">
-        If RMSE is much larger than MAE, the model occasionally makes big mistakes even though it's usually close.
+        If RMSE is much larger than MAE, the model occasionally makes big mistakes even though it&#39;s usually close.
         If RMSE ≈ MAE, errors are consistently small.
       </Callout>
 
@@ -610,12 +610,12 @@ function RevenueContent() {
       <H1>Revenue Prediction Pipeline</H1>
       <H2>Purpose</H2>
       <P>
-        The revenue pipeline forecasts the <strong>total revenue</strong> a client's business is expected to
+        The revenue pipeline forecasts the <strong>total revenue</strong> a client&#39;s business is expected to
         generate at three monthly horizons. This enables:
       </P>
       <UL>
         <Li><strong>Early decline detection</strong> — A falling revenue trajectory across horizons, paired with rising risk, confirms a deteriorating situation before it becomes critical.</Li>
-        <Li><strong>Portfolio segmentation</strong> — Group clients by revenue trajectory shape (growing, flat, declining) to allocate advisory resources where they'll have the most impact.</Li>
+        <Li><strong>Portfolio segmentation</strong> — Group clients by revenue trajectory shape (growing, flat, declining) to allocate advisory resources where they&#39;ll have the most impact.</Li>
         <Li><strong>Financial planning support</strong> — Monthly revenue projections help advisors have informed conversations about cash-flow management and loan repayment capacity.</Li>
       </UL>
 
@@ -737,9 +737,9 @@ function PortfolioContent() {
       <H1>Portfolio &amp; Client Profiles</H1>
       <H2>Purpose</H2>
       <P>
-        The Portfolio view provides a <strong>bird's-eye view of the entire enterprise base</strong>, scoring
+        The Portfolio view provides a <strong>bird&#39;s-eye view of the entire enterprise base</strong>, scoring
         every client through all three prediction pipelines and presenting results in a single, sortable,
-        filterable table. It answers: <em>"Across all our clients, who needs attention and why?"</em>
+        filterable table. It answers: <em>&quot;Across all our clients, who needs attention and why?&quot;</em>
       </P>
 
       <H2>How It Works</H2>
@@ -801,7 +801,7 @@ function PortfolioContent() {
         <Li><strong>Risk Assessment</strong> — Risk tier and score at all three horizons with trajectory sparkline. Per-class probabilities (LOW/MEDIUM/HIGH).</Li>
         <Li><strong>Employment Forecast</strong> — Jobs created and jobs lost at all three horizons with trajectory sparklines. Net employment direction.</Li>
         <Li><strong>Revenue Projection</strong> — Revenue forecast at all three horizons with trajectory sparkline.</Li>
-        <Li><strong>AI Profile Summary</strong> — An AI-generated natural language summary of the client's situation, powered by the RAG Agent. Highlights key risks, opportunities, and recommended interventions.</Li>
+        <Li><strong>AI Profile Summary</strong> — An AI-generated natural language summary of the client&#39;s situation, powered by the RAG Agent. Highlights key risks, opportunities, and recommended interventions.</Li>
         <Li><strong>Key Indicators</strong> — Client demographics, loan details, and financial ratios at a glance.</Li>
       </UL>
 
@@ -848,7 +848,7 @@ function AdvisoryContent() {
       <P>
         The Advisory tab generates <strong>governance-aware, per-enterprise advisory plans</strong> that
         translate model predictions into actionable intervention recommendations. Each plan is tailored to the
-        enterprise's risk tier, country-specific regulatory environment, and projected financial and
+        enterprise&#39;s risk tier, country-specific regulatory environment, and projected financial and
         employment trajectories.
       </P>
 
@@ -872,7 +872,7 @@ function AdvisoryContent() {
       </UL>
 
       <H3>2. Governance (Country-Specific)</H3>
-      <P>Regulatory compliance checks are generated using the enterprise's country. The system includes dedicated frameworks for:</P>
+      <P>Regulatory compliance checks are generated using the enterprise&#39;s country. The system includes dedicated frameworks for:</P>
       <DocTable
         cols={["Country", "Framework", "Regulator"]}
         rows={[
@@ -902,7 +902,7 @@ function AdvisoryContent() {
       <H3>5. Growth</H3>
       <UL>
         <Li><strong>LOW tier:</strong> Market expansion assessment, digital presence development, advanced program enrollment.</Li>
-        <Li><strong>MEDIUM tier:</strong> "Stabilise before scaling" guidance.</Li>
+        <Li><strong>MEDIUM tier:</strong> &quot;Stabilise before scaling&quot; guidance.</Li>
       </UL>
 
       <H2>API Usage</H2>

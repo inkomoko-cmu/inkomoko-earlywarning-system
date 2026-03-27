@@ -3,6 +3,7 @@
 import asyncio
 import datetime
 import logging
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -12,11 +13,12 @@ import numpy as np
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_roles, get_db
+from app.core.config import settings
 from app.ml import get_registry, models_are_loaded
 from app.ml.config import RISK_LABELS, HORIZONS
 from app.ml.preprocessing import align_features
@@ -61,6 +63,8 @@ EXPECTED_MODELS = [
 
 
 class ModelStatusResponse(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     models_exist: bool
     model_count: int
     expected_count: int
@@ -130,12 +134,17 @@ async def train_models():
         )
 
     try:
+        child_env = os.environ.copy()
+        # Ensure the training subprocess always receives a usable DB URL.
+        child_env["DATABASE_URL"] = settings.DATABASE_URL
+
         # Run training script synchronously
         result = subprocess.run(
             [sys.executable, str(TRAIN_SCRIPT)],
             cwd=str(ML_DIR),
             capture_output=True,
             text=True,
+            env=child_env,
             timeout=600,  # 10 minute timeout
         )
 

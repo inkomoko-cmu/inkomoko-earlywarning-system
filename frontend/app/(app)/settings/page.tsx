@@ -10,7 +10,9 @@ import { RequireRole } from "@/components/auth/RequireRole";
 import { apiFetch } from "@/lib/api";
 import { type AiInsight, clampConfidence } from "@/lib/insights";
 import { useLiveAiInsights } from "@/lib/useLiveAiInsights";
-import { Activity, Bell, Bot, Clock3, Database, Settings2, ShieldAlert, Sparkles, UserPlus, Users, RotateCcw, Save } from "lucide-react";
+import { Activity, Bell, Bot, Clock3, Database, Play, Settings2, ShieldAlert, Sparkles, Upload, UserPlus, Users, RotateCcw, Save } from "lucide-react";
+import { BASE } from "@/lib/api";
+import { getSession } from "@/lib/session";
 
 type RiskTier = {
   score_min: number;
@@ -88,7 +90,16 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"risk" | "horizons" | "retraining" | "cron" | "alerts" | "users" | "snapshot">("risk");
+  const [activeTab, setActiveTab] = useState<"risk" | "horizons" | "training" | "cron" | "alerts" | "users" | "upload" | "snapshot">("risk");
+
+  /* ── Training trigger state ── */
+  const [training, setTraining] = useState(false);
+  const [trainResult, setTrainResult] = useState<{ status: string; message: string; models_trained?: number } | null>(null);
+
+  /* ── Upload state ── */
+  const [uploadingDataset, setUploadingDataset] = useState<string | null>(null);
+  const [uploadResult, setUploadResult] = useState<Record<string, any> | null>(null);
+  const [uploadErrors, setUploadErrors] = useState<string[] | null>(null);
 
   const [newUser, setNewUser] = useState<NewUserForm>({
     email: "",
@@ -278,13 +289,48 @@ export default function SettingsPage() {
     }
   };
 
+  /* ── Upload handler (uses raw fetch — apiFetch hardcodes Content-Type:json) ── */
+  const uploadFile = async (datasetType: string, file: File) => {
+    setUploadingDataset(datasetType);
+    setUploadResult(null);
+    setUploadErrors(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const token = getSession()?.access_token;
+      const res = await fetch(`${BASE}/upload/${datasetType}`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        const errs = data?.detail?.validation_errors ?? [data?.detail ?? "Upload failed"];
+        setUploadErrors(Array.isArray(errs) ? errs.map(String) : [String(errs)]);
+      } else {
+        setUploadResult(data);
+        setSuccess(`Uploaded ${data.rows_uploaded ?? data.users_created ?? 0} records successfully.`);
+        setTimeout(() => setSuccess(null), 4000);
+        if (datasetType === "users") {
+          const usersRes = await apiFetch<UserItem[]>("/users", { method: "GET" }, true);
+          setUsers(usersRes);
+        }
+      }
+    } catch (e: any) {
+      setUploadErrors([e?.message ?? "Upload failed"]);
+    } finally {
+      setUploadingDataset(null);
+    }
+  };
+
   const tabs = [
     { id: "risk" as const, label: "Risk Thresholds", icon: <ShieldAlert size={16} /> },
     { id: "horizons" as const, label: "Prediction Horizons", icon: <Activity size={16} /> },
-    { id: "retraining" as const, label: "Retraining", icon: <Bot size={16} /> },
+    { id: "training" as const, label: "Training", icon: <Bot size={16} /> },
     { id: "cron" as const, label: "Cron Jobs", icon: <Clock3 size={16} /> },
     { id: "alerts" as const, label: "Alert Rules", icon: <Bell size={16} /> },
     { id: "users" as const, label: "Users", icon: <UserPlus size={16} /> },
+    { id: "upload" as const, label: "Data Upload", icon: <Upload size={16} /> },
     { id: "snapshot" as const, label: "Snapshot", icon: <Database size={16} /> },
   ];
 
@@ -324,10 +370,8 @@ export default function SettingsPage() {
   }, [
     activeUsers,
     adminUsers,
+    draft,
     dirty,
-    draft?.alert_rules.delivery_channel,
-    draft?.retraining.enabled,
-    draft?.retraining.frequency,
     enabledCronJobs,
     enabledHorizons,
   ]);
@@ -539,53 +583,120 @@ export default function SettingsPage() {
             </Card>
           )}
 
-          {/* Retraining Tab */}
-          {activeTab === "retraining" && (
+          {/* Training Tab */}
+          {activeTab === "training" && (
             <Card className="hover:shadow-lg transition-shadow">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2"><Bot size={18} /> Retraining Configuration</CardTitle>
-                <CardDescription>Schedule model refresh and deployment policy.</CardDescription>
+                <CardTitle className="flex items-center gap-2"><Bot size={18} /> Training Configuration</CardTitle>
+                <CardDescription>Train models on demand or schedule automatic retraining.</CardDescription>
               </CardHeader>
-              <CardContent className="grid grid-cols-2 gap-4 text-sm">
-                <label className="col-span-2 flex items-center gap-2 p-3 rounded-lg border border-inkomoko-border bg-inkomoko-bg/25">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 rounded border-inkomoko-border text-inkomoko-blue focus:ring-inkomoko-blue/30"
-                    checked={draft.retraining.enabled}
-                    onChange={(e) => setDraft((prev) => prev ? { ...prev, retraining: { ...prev.retraining, enabled: e.target.checked } } : prev)}
-                  />
-                  Enable retraining
-                </label>
-                <SelectField
-                  label="Frequency"
-                  value={draft.retraining.frequency}
-                  options={["weekly", "monthly", "quarterly"]}
-                  onChange={(v) => setDraft((prev) => prev ? { ...prev, retraining: { ...prev.retraining, frequency: v } } : prev)}
-                />
-                <TextField
-                  label="Run time UTC"
-                  value={draft.retraining.run_time_utc}
-                  onChange={(v) => setDraft((prev) => prev ? { ...prev, retraining: { ...prev.retraining, run_time_utc: v } } : prev)}
-                />
-                <InputNumber
-                  label="Training window (months)"
-                  value={draft.retraining.training_window_months}
-                  onChange={(v) => setDraft((prev) => prev ? { ...prev, retraining: { ...prev.retraining, training_window_months: v } } : prev)}
-                />
-                <InputNumber
-                  label="Min improvement %"
-                  value={draft.retraining.min_improvement_pct}
-                  onChange={(v) => setDraft((prev) => prev ? { ...prev, retraining: { ...prev.retraining, min_improvement_pct: v } } : prev)}
-                />
-                <label className="col-span-2 flex items-center gap-2 p-3 rounded-lg border border-inkomoko-border bg-inkomoko-bg/25">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 rounded border-inkomoko-border text-inkomoko-blue focus:ring-inkomoko-blue/30"
-                    checked={draft.retraining.auto_deploy}
-                    onChange={(e) => setDraft((prev) => prev ? { ...prev, retraining: { ...prev.retraining, auto_deploy: e.target.checked } } : prev)}
-                  />
-                  Auto-deploy improved model version
-                </label>
+              <CardContent className="space-y-5">
+                {/* ── Hot trigger ── */}
+                <div className="rounded-xl border border-inkomoko-border bg-gradient-to-r from-inkomoko-bg/40 to-inkomoko-bg/20 p-5">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                    <div>
+                      <h3 className="text-sm font-semibold flex items-center gap-2">
+                        <Play size={15} className="text-inkomoko-blue" /> Train Models Now
+                      </h3>
+                      <p className="text-xs text-inkomoko-muted mt-1">
+                        Run the full training pipeline immediately. This trains all models (revenue, employment, risk) from the latest data. May take 2–5 minutes.
+                      </p>
+                    </div>
+                    <button
+                      disabled={training}
+                      onClick={async () => {
+                        setTraining(true);
+                        setTrainResult(null);
+                        setError(null);
+                        try {
+                          const res = await apiFetch<{ status: string; message: string; models_trained?: number }>(
+                            "/ml/train",
+                            { method: "POST" },
+                            true,
+                          );
+                          setTrainResult(res);
+                          if (res.status === "success") {
+                            setSuccess(res.message);
+                            setTimeout(() => setSuccess(null), 5000);
+                          } else {
+                            setError(res.message || "Training failed.");
+                          }
+                        } catch (e: any) {
+                          setError(e?.message ?? "Training request failed.");
+                        } finally {
+                          setTraining(false);
+                        }
+                      }}
+                      className={`flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-medium transition-all whitespace-nowrap ${
+                        training
+                          ? "bg-amber-50 text-amber-600 border border-amber-200 cursor-wait animate-pulse"
+                          : "bg-gradient-to-r from-inkomoko-blue to-[#0d4f87] text-white hover:shadow-lg hover:scale-105 border border-inkomoko-blue/30 cursor-pointer"
+                      }`}
+                    >
+                      <Play size={14} />
+                      {training ? "Training in progress…" : "Train All Models"}
+                    </button>
+                  </div>
+                  {trainResult && (
+                    <div className={`mt-3 rounded-lg p-3 text-xs ${
+                      trainResult.status === "success"
+                        ? "bg-green-50 border border-green-200 text-green-700"
+                        : "bg-red-50 border border-red-200 text-red-700"
+                    }`}>
+                      <span className="font-medium">{trainResult.status === "success" ? "✓" : "✗"}</span>{" "}
+                      {trainResult.message}
+                      {trainResult.models_trained != null && (
+                        <span className="ml-2 text-green-500">({trainResult.models_trained} models trained)</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Scheduled retraining settings ── */}
+                <div className="rounded-xl border border-inkomoko-border bg-inkomoko-bg/20 p-4">
+                  <h3 className="text-sm font-semibold mb-3">Scheduled Retraining</h3>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <label className="col-span-2 flex items-center gap-2 p-3 rounded-lg border border-inkomoko-border bg-white">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-inkomoko-border text-inkomoko-blue focus:ring-inkomoko-blue/30"
+                        checked={draft.retraining.enabled}
+                        onChange={(e) => setDraft((prev) => prev ? { ...prev, retraining: { ...prev.retraining, enabled: e.target.checked } } : prev)}
+                      />
+                      Enable scheduled retraining
+                    </label>
+                    <SelectField
+                      label="Frequency"
+                      value={draft.retraining.frequency}
+                      options={["weekly", "monthly", "quarterly"]}
+                      onChange={(v) => setDraft((prev) => prev ? { ...prev, retraining: { ...prev.retraining, frequency: v } } : prev)}
+                    />
+                    <TextField
+                      label="Run time UTC"
+                      value={draft.retraining.run_time_utc}
+                      onChange={(v) => setDraft((prev) => prev ? { ...prev, retraining: { ...prev.retraining, run_time_utc: v } } : prev)}
+                    />
+                    <InputNumber
+                      label="Training window (months)"
+                      value={draft.retraining.training_window_months}
+                      onChange={(v) => setDraft((prev) => prev ? { ...prev, retraining: { ...prev.retraining, training_window_months: v } } : prev)}
+                    />
+                    <InputNumber
+                      label="Min improvement %"
+                      value={draft.retraining.min_improvement_pct}
+                      onChange={(v) => setDraft((prev) => prev ? { ...prev, retraining: { ...prev.retraining, min_improvement_pct: v } } : prev)}
+                    />
+                    <label className="col-span-2 flex items-center gap-2 p-3 rounded-lg border border-inkomoko-border bg-white">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-inkomoko-border text-inkomoko-blue focus:ring-inkomoko-blue/30"
+                        checked={draft.retraining.auto_deploy}
+                        onChange={(e) => setDraft((prev) => prev ? { ...prev, retraining: { ...prev.retraining, auto_deploy: e.target.checked } } : prev)}
+                      />
+                      Auto-deploy improved model version
+                    </label>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           )}
@@ -774,6 +885,82 @@ export default function SettingsPage() {
             </Card>
           )}
 
+          {/* Data Upload Tab */}
+          {activeTab === "upload" && (
+            <Card className="hover:shadow-lg transition-shadow">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><Upload size={18} /> Data Upload</CardTitle>
+                <CardDescription>Upload CSV files for baseline, endline, investment data, or bulk-create user accounts. The system validates column structure and data types before importing.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Status banners */}
+                {uploadErrors && (
+                  <div className="rounded-xl border border-red-200 bg-red-50 p-4">
+                    <h4 className="mb-2 text-sm font-semibold text-red-700">Validation Errors</h4>
+                    <ul className="list-disc pl-5 space-y-1 text-xs text-red-600">
+                      {uploadErrors.map((e, i) => <li key={i}>{e}</li>)}
+                    </ul>
+                    <button onClick={() => setUploadErrors(null)} className="mt-2 text-xs text-red-400 hover:text-red-600 underline">Dismiss</button>
+                  </div>
+                )}
+                {uploadResult && (
+                  <div className="rounded-xl border border-green-200 bg-green-50 p-4">
+                    <h4 className="mb-1 text-sm font-semibold text-green-700">Upload Successful</h4>
+                    <p className="text-xs text-green-600">
+                      {uploadResult.rows_uploaded != null
+                        ? `${uploadResult.rows_uploaded} rows uploaded to ${uploadResult.dataset_type}. Total rows in table: ${uploadResult.total_rows_in_table}.`
+                        : `${uploadResult.users_created} users created, ${uploadResult.users_skipped} skipped. ${uploadResult.note}`}
+                    </p>
+                    {uploadResult.skipped_emails?.length > 0 && (
+                      <p className="mt-1 text-xs text-green-500">Skipped emails: {uploadResult.skipped_emails.join(", ")}</p>
+                    )}
+                    <button onClick={() => setUploadResult(null)} className="mt-2 text-xs text-green-400 hover:text-green-600 underline">Dismiss</button>
+                  </div>
+                )}
+
+                {/* Baseline */}
+                <UploadSection
+                  title="Baseline Data"
+                  description="Survey data from baseline assessments."
+                  columns={["client_id", "country", "survey_date", "job_created", "revenue", "business_sector"]}
+                  datasetType="baseline"
+                  uploading={uploadingDataset === "baseline"}
+                  onUpload={uploadFile}
+                />
+
+                {/* Endline */}
+                <UploadSection
+                  title="Endline Data"
+                  description="Follow-up survey data from endline assessments. Optional boolean columns: nps_promoter, nps_detractor, satisfied_yes, satisfied_no."
+                  columns={["client_id", "country", "survey_date", "job_created", "revenue", "business_sector"]}
+                  datasetType="endline"
+                  uploading={uploadingDataset === "endline"}
+                  onUpload={uploadFile}
+                />
+
+                {/* Investment */}
+                <UploadSection
+                  title="Investment Data"
+                  description="Loan and investment portfolio data. Numeric columns (appliedamount, currentbalance, etc.) and date columns (disbursementdate) are validated."
+                  columns={["loannumber", "country", "disbursementdate", "appliedamount", "approvedamount", "disbursedamount", "currentbalance", "daysinarrears", "loanstatus", "industrysectorofactivity"]}
+                  datasetType="investment"
+                  uploading={uploadingDataset === "investment"}
+                  onUpload={uploadFile}
+                />
+
+                {/* Users */}
+                <UploadSection
+                  title="User Accounts"
+                  description="Bulk-create user accounts from CSV. All uploaded users are set as INACTIVE by default — activate them in the Users tab. Valid roles: admin, program_manager, advisor, donor."
+                  columns={["email", "full_name", "password", "role"]}
+                  datasetType="users"
+                  uploading={uploadingDataset === "users"}
+                  onUpload={uploadFile}
+                />
+              </CardContent>
+            </Card>
+          )}
+
           {/* Configuration Snapshot Tab */}
           {activeTab === "snapshot" && (
             <Card className="hover:shadow-lg transition-shadow">
@@ -870,5 +1057,62 @@ function SelectField({
         ))}
       </select>
     </label>
+  );
+}
+
+function UploadSection({
+  title,
+  description,
+  columns,
+  datasetType,
+  uploading,
+  onUpload,
+}: {
+  title: string;
+  description: string;
+  columns: string[];
+  datasetType: string;
+  uploading: boolean;
+  onUpload: (datasetType: string, file: File) => void;
+}) {
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+  return (
+    <div className="rounded-xl border border-inkomoko-border bg-inkomoko-bg/20 p-4">
+      <h3 className="text-sm font-semibold mb-1">{title}</h3>
+      <p className="text-xs text-inkomoko-muted mb-3">{description}</p>
+      <div className="mb-3">
+        <span className="text-[11px] font-medium text-inkomoko-muted block mb-1.5">Required columns</span>
+        <div className="flex flex-wrap gap-1.5">
+          {columns.map((col) => (
+            <span key={col} className="inline-block rounded-md bg-inkomoko-blue/10 text-inkomoko-blue px-2 py-0.5 text-[11px] font-mono">
+              {col}
+            </span>
+          ))}
+        </div>
+      </div>
+      <div className="flex items-center gap-3">
+        <label className="flex-1 relative">
+          <input
+            type="file"
+            accept=".csv"
+            className="w-full text-sm text-inkomoko-muted file:mr-3 file:rounded-lg file:border-0 file:bg-inkomoko-blue/10 file:px-4 file:py-2 file:text-xs file:font-medium file:text-inkomoko-blue hover:file:bg-inkomoko-blue/20 file:cursor-pointer file:transition"
+            onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)}
+          />
+        </label>
+        <button
+          disabled={!selectedFile || uploading}
+          onClick={() => selectedFile && onUpload(datasetType, selectedFile)}
+          className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all whitespace-nowrap ${
+            !selectedFile || uploading
+              ? "bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed"
+              : "bg-gradient-to-r from-inkomoko-blue to-[#0d4f87] text-white hover:shadow-lg hover:scale-105 border border-inkomoko-blue/30 cursor-pointer"
+          }`}
+        >
+          <Upload size={14} />
+          {uploading ? "Uploading..." : "Upload"}
+        </button>
+      </div>
+    </div>
   );
 }
