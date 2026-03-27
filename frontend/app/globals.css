@@ -17,3 +17,12 @@ body {
 ::selection {
   background: rgba(240, 90, 40, 0.25);
 }
+
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0.25; }
+}
+
+.animate-skeleton {
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
