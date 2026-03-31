@@ -369,6 +369,21 @@ async def predict_revenue(
 # Model Cards Endpoint
 # ══════════════════════════════════════════════════════════════════════════════
 
+import math
+
+
+def _sanitize_floats(obj):
+    """Recursively replace inf / -inf / NaN floats with None so the dict is JSON-safe."""
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return None
+        return obj
+    if isinstance(obj, dict):
+        return {k: _sanitize_floats(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_sanitize_floats(v) for v in obj]
+    return obj
+
 
 def _get_feature_importance(
     model_obj, feature_names: List[str], top_n: int = 20
@@ -705,7 +720,7 @@ async def get_model_cards():
             "models": rev_models_info,
         }
 
-        return JSONResponse(content=cards)
+        return JSONResponse(content=_sanitize_floats(cards))
 
     except Exception as e:
         logger.error(f"Model cards retrieval failed: {e}", exc_info=True)

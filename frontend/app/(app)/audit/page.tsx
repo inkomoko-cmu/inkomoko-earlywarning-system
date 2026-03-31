@@ -342,11 +342,6 @@ export default function AuditPage() {
               </button>
             );
           })}
-          {!mlAvailable && (
-            <span className="ml-auto self-center rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] text-amber-700">
-              ML service offline — showing backend events only
-            </span>
-          )}
         </div>
 
         {/* ── Filters ── */}

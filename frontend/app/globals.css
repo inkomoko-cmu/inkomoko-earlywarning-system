@@ -26,3 +26,35 @@ body {
 .animate-skeleton {
   animation: skeleton-pulse 1.5s ease-in-out infinite;
 }
+
+/* ── Print styles ───────────────────────────────────────────────────────── */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 12mm 10mm;
+  }
+
+  body {
+    background: white !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  /* Avoid breaking inside cards and table rows */
+  .rounded-2xl,
+  .rounded-xl,
+  tr {
+    break-inside: avoid;
+  }
+
+  /* Ensure charts and gradients print with color */
+  .recharts-wrapper,
+  [class*="bg-gradient"] {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}

@@ -78,15 +78,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen flex">
-      <div className="sticky top-0 h-screen flex-shrink-0 overflow-y-auto">
+      <div className="no-print sticky top-0 h-screen flex-shrink-0 overflow-y-auto">
         <Sidebar />
       </div>
 
       <div className="flex-1 min-w-0">
-        <Topbar />
+        <div className="no-print">
+          <Topbar />
+        </div>
 
         {/* Page content */}
-        <main className="px-6 py-6 bg-inkomoko-bg min-h-[calc(100vh-60px)]">
+        <main className="px-6 py-6 print:p-0 bg-inkomoko-bg print:bg-white min-h-[calc(100vh-60px)]">
           {children}
         </main>
       </div>

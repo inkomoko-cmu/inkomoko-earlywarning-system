@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -10,7 +10,7 @@ import { RequireRole } from "@/components/auth/RequireRole";
 import { apiFetch } from "@/lib/api";
 import { type AiInsight, clampConfidence } from "@/lib/insights";
 import { useLiveAiInsights } from "@/lib/useLiveAiInsights";
-import { Activity, Bell, Bot, Clock3, Database, Play, Settings2, ShieldAlert, Sparkles, Upload, UserPlus, Users, RotateCcw, Save } from "lucide-react";
+import { Activity, Bell, Bot, Clock3, Database, Download, Play, Settings2, ShieldAlert, Sparkles, Upload, UserPlus, Users, RotateCcw, Save } from "lucide-react";
 import { BASE } from "@/lib/api";
 import { getSession } from "@/lib/session";
 
@@ -100,6 +100,13 @@ export default function SettingsPage() {
   const [uploadingDataset, setUploadingDataset] = useState<string | null>(null);
   const [uploadResult, setUploadResult] = useState<Record<string, any> | null>(null);
   const [uploadErrors, setUploadErrors] = useState<string[] | null>(null);
+
+  /* ── Preview state ── */
+  const previewRef = useRef<HTMLDivElement>(null);
+  const [previewData, setPreviewData] = useState<{ columns: string[]; rows: Record<string, string>[]; total: number; errors: string[] } | null>(null);
+  const [previewDatasetType, setPreviewDatasetType] = useState<string | null>(null);
+  const [previewFile, setPreviewFile] = useState<File | null>(null);
+  const [previewing, setPreviewing] = useState(false);
 
   const [newUser, setNewUser] = useState<NewUserForm>({
     email: "",
@@ -321,6 +328,63 @@ export default function SettingsPage() {
     } finally {
       setUploadingDataset(null);
     }
+  };
+
+  /* ── Preview handler — validates + returns sample rows, no DB write ── */
+  const previewUpload = async (datasetType: string, file: File) => {
+    setPreviewing(true);
+    setPreviewData(null);
+    setPreviewDatasetType(datasetType);
+    setPreviewFile(file);
+    setUploadErrors(null);
+    setUploadResult(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const token = getSession()?.access_token;
+      const url = `${BASE}/upload/${datasetType}/preview`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        const errs = data?.detail?.validation_errors ?? [data?.detail ?? "Preview failed"];
+        setUploadErrors(Array.isArray(errs) ? errs.map(String) : [String(errs)]);
+        setPreviewDatasetType(null);
+        setPreviewFile(null);
+      } else {
+        setPreviewData({
+          columns: data.columns,
+          rows: data.preview_rows,
+          total: data.total_rows,
+          errors: data.validation_errors ?? [],
+        });
+        setTimeout(() => previewRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
+      }
+    } catch (e: any) {
+      setUploadErrors([e?.message ?? "Preview failed"]);
+      setPreviewDatasetType(null);
+      setPreviewFile(null);
+    } finally {
+      setPreviewing(false);
+    }
+  };
+
+  const confirmUpload = async () => {
+    if (!previewFile || !previewDatasetType) return;
+    await uploadFile(previewDatasetType, previewFile);
+    setPreviewData(null);
+    setPreviewDatasetType(null);
+    setPreviewFile(null);
+  };
+
+  const cancelPreview = () => {
+    setPreviewData(null);
+    setPreviewDatasetType(null);
+    setPreviewFile(null);
+    setPreviewing(false);
   };
 
   const tabs = [
@@ -890,7 +954,7 @@ export default function SettingsPage() {
             <Card className="hover:shadow-lg transition-shadow">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2"><Upload size={18} /> Data Upload</CardTitle>
-                <CardDescription>Upload CSV files for baseline, endline, investment data, or bulk-create user accounts. The system validates column structure and data types before importing.</CardDescription>
+                <CardDescription>Upload CSV or JSON files for baseline, endline, investment data, or bulk-create user accounts. Files are previewed before saving — you can proceed or cancel.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 {/* Status banners */}
@@ -922,41 +986,162 @@ export default function SettingsPage() {
                 <UploadSection
                   title="Baseline Data"
                   description="Survey data from baseline assessments."
-                  columns={["client_id", "country", "survey_date", "job_created", "revenue", "business_sector"]}
+                  columns={[
+                    { name: "client_id", required: true }, { name: "country", required: true }, { name: "survey_date", required: true },
+                    { name: "job_created", required: true }, { name: "revenue", required: true }, { name: "business_sector", required: true },
+                    { name: "age", required: false }, { name: "gender", required: false }, { name: "strata", required: false },
+                    { name: "client_location", required: false }, { name: "nationality", required: false }, { name: "education_level", required: false },
+                    { name: "only_income_earner", required: false }, { name: "number_of_people_reponsible", required: false },
+                    { name: "business_location", required: false }, { name: "is_business_registered", required: false },
+                    { name: "has_access_to_finance_in_past6months", required: false }, { name: "have_bank_account", required: false },
+                    { name: "monthly_customer", required: false }, { name: "kept_sales_record", required: false }, { name: "hh_expense", required: false },
+                  ]}
                   datasetType="baseline"
-                  uploading={uploadingDataset === "baseline"}
-                  onUpload={uploadFile}
+                  uploading={previewing && previewDatasetType === "baseline"}
+                  onPreview={previewUpload}
                 />
 
                 {/* Endline */}
                 <UploadSection
                   title="Endline Data"
-                  description="Follow-up survey data from endline assessments. Optional boolean columns: nps_promoter, nps_detractor, satisfied_yes, satisfied_no."
-                  columns={["client_id", "country", "survey_date", "job_created", "revenue", "business_sector"]}
+                  description="Follow-up survey data from endline assessments."
+                  columns={[
+                    { name: "client_id", required: true }, { name: "country", required: true }, { name: "survey_date", required: true },
+                    { name: "job_created", required: true }, { name: "revenue", required: true }, { name: "business_sector", required: true },
+                    { name: "age", required: false }, { name: "gender", required: false }, { name: "strata", required: false },
+                    { name: "client_location", required: false }, { name: "nationality", required: false }, { name: "education_level", required: false },
+                    { name: "only_income_earner", required: false }, { name: "number_of_people_reponsible", required: false },
+                    { name: "business_location", required: false }, { name: "is_business_registered", required: false },
+                    { name: "has_access_to_finance_in_past6months", required: false }, { name: "have_bank_account", required: false },
+                    { name: "monthly_customer", required: false }, { name: "kept_sales_record", required: false }, { name: "hh_expense", required: false },
+                    { name: "nps_detractor", required: false }, { name: "nps_passive", required: false }, { name: "nps_promoter", required: false },
+                    { name: "satisfied_yes", required: false }, { name: "satisfied_no", required: false },
+                  ]}
                   datasetType="endline"
-                  uploading={uploadingDataset === "endline"}
-                  onUpload={uploadFile}
+                  uploading={previewing && previewDatasetType === "endline"}
+                  onPreview={previewUpload}
                 />
 
                 {/* Investment */}
                 <UploadSection
                   title="Investment Data"
                   description="Loan and investment portfolio data. Numeric columns (appliedamount, currentbalance, etc.) and date columns (disbursementdate) are validated."
-                  columns={["loannumber", "country", "disbursementdate", "appliedamount", "approvedamount", "disbursedamount", "currentbalance", "daysinarrears", "loanstatus", "industrysectorofactivity"]}
+                  columns={[
+                    { name: "loannumber", required: true }, { name: "country", required: true }, { name: "disbursementdate", required: true },
+                    { name: "appliedamount", required: true }, { name: "approvedamount", required: true }, { name: "disbursedamount", required: true },
+                    { name: "currentbalance", required: true }, { name: "daysinarrears", required: true }, { name: "loanstatus", required: true },
+                    { name: "industrysectorofactivity", required: true },
+                    { name: "clientid", required: false }, { name: "baselineendlineclientid", required: false },
+                    { name: "purpose", required: false }, { name: "strata", required: false }, { name: "age", required: false },
+                    { name: "gender", required: false }, { name: "nationality", required: false }, { name: "cycle", required: false },
+                    { name: "province", required: false }, { name: "district", required: false },
+                    { name: "submissiondate", required: false }, { name: "approvaldate", required: false },
+                    { name: "disbursementyear", required: false }, { name: "loantype", required: false }, { name: "termsduration", required: false },
+                    { name: "actualpaymentamount", required: false }, { name: "principalpaid", required: false },
+                    { name: "interestpaid", required: false }, { name: "insurancefeepaid", required: false },
+                    { name: "totallatefeespaid", required: false }, { name: "excessamountpaid", required: false },
+                    { name: "interestwaived", required: false }, { name: "principalbalance", required: false },
+                    { name: "interestbalance", required: false }, { name: "feesbalance", required: false },
+                    { name: "amountpastdue", required: false }, { name: "principalpastdue", required: false },
+                    { name: "interestpastdue", required: false }, { name: "feespastdue", required: false },
+                    { name: "scheduledprincipalamount", required: false }, { name: "scheduledinterestamount", required: false },
+                    { name: "scheduledfeessamount", required: false }, { name: "scheduledpaymentamount", required: false },
+                    { name: "lastpaymentamount", required: false }, { name: "lastprincipalamount", required: false },
+                    { name: "lastinterestamount", required: false }, { name: "lastfeesamount", required: false },
+                    { name: "lastlatefeesamount", required: false }, { name: "lastexcessamount", required: false },
+                    { name: "installmentinarrears", required: false }, { name: "lastpaymentdate", required: false },
+                    { name: "businesssubsector", required: false },
+                  ]}
                   datasetType="investment"
-                  uploading={uploadingDataset === "investment"}
-                  onUpload={uploadFile}
+                  uploading={previewing && previewDatasetType === "investment"}
+                  onPreview={previewUpload}
                 />
 
                 {/* Users */}
                 <UploadSection
                   title="User Accounts"
-                  description="Bulk-create user accounts from CSV. All uploaded users are set as INACTIVE by default — activate them in the Users tab. Valid roles: admin, program_manager, advisor, donor."
-                  columns={["email", "full_name", "password", "role"]}
+                  description="Bulk-create user accounts from CSV or JSON. All uploaded users are set as INACTIVE by default — activate them in the Users tab. Valid roles: admin, program_manager, advisor, donor."
+                  columns={[
+                    { name: "email", required: true }, { name: "full_name", required: true },
+                    { name: "password", required: true }, { name: "role", required: true },
+                  ]}
                   datasetType="users"
-                  uploading={uploadingDataset === "users"}
-                  onUpload={uploadFile}
+                  uploading={previewing && previewDatasetType === "users"}
+                  onPreview={previewUpload}
                 />
+
+                {/* ── Data Preview ── */}
+                {previewData && (
+                  <div ref={previewRef} className="rounded-xl border border-inkomoko-blue/30 bg-inkomoko-blue/5 p-4 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-sm font-semibold">
+                        Preview: <span className="capitalize">{previewDatasetType}</span>{" "}
+                        <span className="text-xs font-normal text-inkomoko-muted">
+                          ({previewData.total} total row{previewData.total !== 1 ? "s" : ""} — showing first {previewData.rows.length})
+                        </span>
+                      </h4>
+                    </div>
+
+                    {/* Validation warnings */}
+                    {previewData.errors.length > 0 && (
+                      <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                        <h5 className="text-xs font-semibold text-amber-700 mb-1">Validation warnings — upload blocked</h5>
+                        <ul className="list-disc pl-4 space-y-0.5 text-xs text-amber-600">
+                          {previewData.errors.map((e, i) => <li key={i}>{e}</li>)}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Scrollable preview table */}
+                    <div className="max-h-80 overflow-auto rounded-lg border border-inkomoko-border">
+                      <table className="w-full text-xs">
+                        <thead className="sticky top-0 bg-inkomoko-bg border-b border-inkomoko-border">
+                          <tr>
+                            <th className="px-2 py-1.5 text-left text-[11px] font-semibold text-inkomoko-muted">#</th>
+                            {previewData.columns.map((col) => (
+                              <th key={col} className="px-2 py-1.5 text-left text-[11px] font-semibold text-inkomoko-muted whitespace-nowrap font-mono">
+                                {col}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {previewData.rows.map((row, ri) => (
+                            <tr key={ri} className={ri % 2 === 0 ? "bg-white" : "bg-inkomoko-bg/30"}>
+                              <td className="px-2 py-1 text-inkomoko-muted">{ri + 1}</td>
+                              {previewData.columns.map((col) => (
+                                <td key={col} className="px-2 py-1 whitespace-nowrap max-w-[200px] truncate">
+                                  {row[col] ?? ""}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Action buttons */}
+                    <div className="flex items-center gap-3">
+                      <button
+                        disabled={previewData.errors.length > 0 || !!uploadingDataset}
+                        onClick={confirmUpload}
+                        className={`flex items-center gap-2 rounded-lg px-5 py-2 text-sm font-medium transition-all ${
+                          previewData.errors.length > 0 || !!uploadingDataset
+                            ? "bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed"
+                            : "bg-gradient-to-r from-green-600 to-green-700 text-white hover:shadow-lg hover:scale-105 border border-green-500/30 cursor-pointer"
+                        }`}
+                      >
+                        {uploadingDataset ? "Uploading…" : "Proceed"}
+                      </button>
+                      <button
+                        onClick={cancelPreview}
+                        className="rounded-lg border border-inkomoko-border px-5 py-2 text-sm font-medium text-inkomoko-muted hover:bg-inkomoko-bg transition"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}
@@ -1066,43 +1251,96 @@ function UploadSection({
   columns,
   datasetType,
   uploading,
-  onUpload,
+  onPreview,
 }: {
   title: string;
   description: string;
-  columns: string[];
+  columns: { name: string; required: boolean }[];
   datasetType: string;
   uploading: boolean;
-  onUpload: (datasetType: string, file: File) => void;
+  onPreview: (datasetType: string, file: File) => void;
 }) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+  const downloadTemplate = (format: "csv" | "json") => {
+    const allNames = columns.map((c) => c.name);
+    let content: string;
+    let mime: string;
+    if (format === "csv") {
+      // Header row with (required)/(optional) comments on a preceding line
+      const commentLine = columns.map((c) => (c.required ? "required" : "optional")).join(",");
+      content = `# ${commentLine}\n${allNames.join(",")}\n`;
+      mime = "text/csv";
+    } else {
+      const row = Object.fromEntries(
+        columns.map((c) => [c.name, c.required ? "(required)" : "(optional)"])
+      );
+      content = JSON.stringify([row], null, 2);
+      mime = "application/json";
+    }
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${datasetType}_template.${format}`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const requiredCols = columns.filter((c) => c.required);
+  const optionalCols = columns.filter((c) => !c.required);
 
   return (
     <div className="rounded-xl border border-inkomoko-border bg-inkomoko-bg/20 p-4">
       <h3 className="text-sm font-semibold mb-1">{title}</h3>
       <p className="text-xs text-inkomoko-muted mb-3">{description}</p>
-      <div className="mb-3">
-        <span className="text-[11px] font-medium text-inkomoko-muted block mb-1.5">Required columns</span>
+      <div className="mb-2">
+        <span className="text-[11px] font-medium text-inkomoko-muted block mb-1.5">
+          Required columns <span className="text-[10px] text-inkomoko-muted/60">({requiredCols.length})</span>
+        </span>
         <div className="flex flex-wrap gap-1.5">
-          {columns.map((col) => (
-            <span key={col} className="inline-block rounded-md bg-inkomoko-blue/10 text-inkomoko-blue px-2 py-0.5 text-[11px] font-mono">
-              {col}
+          {requiredCols.map((col) => (
+            <span key={col.name} className="inline-block rounded-md bg-inkomoko-blue/10 text-inkomoko-blue px-2 py-0.5 text-[11px] font-mono">
+              {col.name}
             </span>
           ))}
         </div>
+      </div>
+      {optionalCols.length > 0 && (
+        <div className="mb-3">
+          <span className="text-[11px] font-medium text-inkomoko-muted block mb-1.5">
+            Optional columns <span className="text-[10px] text-inkomoko-muted/60">({optionalCols.length})</span>
+          </span>
+          <div className="flex flex-wrap gap-1.5">
+            {optionalCols.map((col) => (
+              <span key={col.name} className="inline-block rounded-md bg-gray-100 text-gray-500 px-2 py-0.5 text-[11px] font-mono">
+                {col.name}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-[11px] font-medium text-inkomoko-muted">Download template:</span>
+        <button onClick={() => downloadTemplate("csv")} className="inline-flex items-center gap-1 rounded-md border border-inkomoko-border px-2 py-0.5 text-[11px] font-medium text-inkomoko-muted hover:bg-inkomoko-bg transition">
+          <Download size={10} /> CSV
+        </button>
+        <button onClick={() => downloadTemplate("json")} className="inline-flex items-center gap-1 rounded-md border border-inkomoko-border px-2 py-0.5 text-[11px] font-medium text-inkomoko-muted hover:bg-inkomoko-bg transition">
+          <Download size={10} /> JSON
+        </button>
       </div>
       <div className="flex items-center gap-3">
         <label className="flex-1 relative">
           <input
             type="file"
-            accept=".csv"
+            accept=".csv,.json"
             className="w-full text-sm text-inkomoko-muted file:mr-3 file:rounded-lg file:border-0 file:bg-inkomoko-blue/10 file:px-4 file:py-2 file:text-xs file:font-medium file:text-inkomoko-blue hover:file:bg-inkomoko-blue/20 file:cursor-pointer file:transition"
             onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)}
           />
         </label>
         <button
           disabled={!selectedFile || uploading}
-          onClick={() => selectedFile && onUpload(datasetType, selectedFile)}
+          onClick={() => selectedFile && onPreview(datasetType, selectedFile)}
           className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all whitespace-nowrap ${
             !selectedFile || uploading
               ? "bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed"
@@ -1110,7 +1348,7 @@ function UploadSection({
           }`}
         >
           <Upload size={14} />
-          {uploading ? "Uploading..." : "Upload"}
+          {uploading ? "Loading preview…" : "Preview & Upload"}
         </button>
       </div>
     </div>

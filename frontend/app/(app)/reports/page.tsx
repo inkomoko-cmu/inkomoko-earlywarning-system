@@ -5,7 +5,6 @@ import { Card, CardContent } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { InsightPanel } from "@/components/ui/InsightPanel";
-import { exportDonorPackPDF, exportPDF } from "@/lib/export";
 import { apiFetch } from "@/lib/api";
 import { type AiInsight, clampConfidence } from "@/lib/insights";
 import {
@@ -25,7 +24,6 @@ import {
 } from "recharts";
 import {
   FileText,
-  Download,
   Shield,
   BarChart3,
   Globe,
@@ -36,6 +34,7 @@ import {
   Eye,
   Zap,
   Activity,
+  Printer,
 } from "lucide-react";
 import { RequireRole } from "@/components/auth/RequireRole";
 
@@ -1311,12 +1310,14 @@ export default function ReportsPage() {
   const [aiJobId, setAiJobId] = useState<string | null>(null);
   const [aiLastUpdated, setAiLastUpdated] = useState<string | null>(null);
 
-  const generateReport = useCallback(async () => {
+  const generateReport = useCallback(async (type?: ReportType) => {
+    const rt = type ?? reportType;
+    if (type) setReportType(rt);
     setLoading(true);
     setError(null);
     setReport(null);
     try {
-      const data = await buildReportFromPortfolio(reportType);
+      const data = await buildReportFromPortfolio(rt);
       setReport(data);
     } catch (e: unknown) {
       setError((e as Error)?.message ?? "Failed to generate report.");
@@ -1327,65 +1328,7 @@ export default function ReportsPage() {
 
   const handleExportPDF = () => {
     if (!report) return;
-    const k = report.kpis ?? ({} as ReportKPIs);
-
-    if (report.report_type === "donor_pack") {
-      const hs = report.horizon_summary ?? {};
-      const total = Math.max(1, k.total_enterprises ?? 1);
-      const highPct = ((k.high_risk_count ?? 0) / total) * 100;
-      const takeaways = [
-        `Coverage includes ${fmt(k.total_enterprises)} enterprises with projected revenue of ${fmt(k.total_projected_revenue, "RWF ")}.`,
-        `${highPct.toFixed(1)}% of enterprises are high-risk and should receive prioritized support.`,
-        `Net jobs impact is ${fmt(k.net_jobs)} with ${fmt(k.total_jobs_created)} jobs created.`,
-      ];
-
-      exportDonorPackPDF("Donor_Pack", {
-        title: report.title,
-        subtitle: report.subtitle,
-        generatedAt: report.generated_at,
-        source: report.source,
-        kpis: {
-          enterprises: k.total_enterprises ?? 0,
-          projectedRevenue: k.total_projected_revenue ?? 0,
-          netJobs: k.net_jobs ?? 0,
-          avgRiskScore: k.avg_risk_score ?? 0,
-          highRisk: k.high_risk_count ?? 0,
-          mediumRisk: k.medium_risk_count ?? 0,
-          lowRisk: k.low_risk_count ?? 0,
-        },
-        takeaways,
-        horizonData: ["1", "2", "3"].map((h) => ({
-          label: h === "1" ? "1 Month" : h === "2" ? "2 Months" : "3 Months",
-          totalRevenue: hs[h]?.total_revenue ?? 0,
-          netJobs: hs[h]?.net_jobs ?? 0,
-          avgRiskScore: hs[h]?.avg_risk_score ?? 0,
-        })),
-        actionItems: report.action_items ?? [],
-      });
-      return;
-    }
-
-    const rows = [
-      { Section: "Report Type", Item: report.title, Value: report.subtitle },
-      { Section: "Generated", Item: "Timestamp", Value: new Date(report.generated_at).toLocaleString() },
-      { Section: "Summary", Item: "Executive Summary", Value: report.executive_summary },
-      { Section: "KPIs", Item: "Total Enterprises", Value: fmt(k.total_enterprises) },
-      { Section: "KPIs", Item: "Projected Revenue (3m)", Value: fmt(k.total_projected_revenue, "RWF ") },
-      { Section: "KPIs", Item: "High-Risk", Value: String(k.high_risk_count ?? "—") },
-      { Section: "KPIs", Item: "Medium-Risk", Value: String(k.medium_risk_count ?? "—") },
-      { Section: "KPIs", Item: "Low-Risk", Value: String(k.low_risk_count ?? "—") },
-      { Section: "KPIs", Item: "Net Jobs", Value: fmt(k.net_jobs) },
-      ...(report.sector_breakdown ?? []).map((s) => ({
-        Section: "Sector Analysis",
-        Item: s.sector ?? "",
-        Value: `${s.count} enterprises, avg risk ${pct(s.avg_risk)}`,
-      })),
-    ];
-    exportPDF(
-      reportType === "donor_pack" ? "Donor_Pack" : "Program_Brief",
-      report.title,
-      rows
-    );
+    window.print();
   };
 
   const deterministicInsights = useMemo<AiInsight[]>(() => {
@@ -1559,7 +1502,7 @@ export default function ReportsPage() {
     <RequireRole allow={["Admin", "Program Manager", "Advisor", "Donor"]}>
       <div className="space-y-6">
         {/* Page header */}
-        <div>
+        <div className="no-print">
           <h1 className="text-2xl font-semibold text-inkomoko-blue flex items-center gap-2">
             <FileText size={20} /> Reports
           </h1>
@@ -1568,16 +1511,18 @@ export default function ReportsPage() {
           </p>
         </div>
 
-        <InsightPanel
-          title="AI Insights"
-          subtitle="Executive narratives generated from the active report context."
-          status={aiStatus}
-          lastUpdated={aiLastUpdated}
-          insights={aiInsights}
-        />
+        <div className="no-print">
+          <InsightPanel
+            title="AI Insights"
+            subtitle="Executive narratives generated from the active report context."
+            status={aiStatus}
+            lastUpdated={aiLastUpdated}
+            insights={aiInsights}
+          />
+        </div>
 
         {/* Controls */}
-        <Card>
+        <Card className="no-print">
           <CardContent className="pt-5">
             <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-wrap">
               {/* Report type selector */}
@@ -1592,7 +1537,8 @@ export default function ReportsPage() {
                 ).map(({ value, icon, label }) => (
                   <button
                     key={value}
-                    onClick={() => setReportType(value)}
+                    onClick={() => generateReport(value)}
+                    disabled={loading}
                     className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
                       reportType === value
                         ? "bg-inkomoko-blue text-white border-inkomoko-blue"
@@ -1606,21 +1552,15 @@ export default function ReportsPage() {
               </div>
 
               <div className="flex gap-2 sm:ml-auto">
-                <Button onClick={generateReport} disabled={loading} className="gap-2">
-                  {loading ? (
-                    <>
-                      <span className="h-3.5 w-3.5 rounded-full border-2 border-white border-t-transparent animate-spin" />
-                      Generating…
-                    </>
-                  ) : (
-                    <>
-                      <Activity size={14} /> Generate Report
-                    </>
-                  )}
-                </Button>
+                {loading && (
+                  <span className="flex items-center gap-2 text-sm text-inkomoko-muted">
+                    <span className="h-3.5 w-3.5 rounded-full border-2 border-inkomoko-blue border-t-transparent animate-spin" />
+                    Generating…
+                  </span>
+                )}
                 {report && (
                   <Button variant="secondary" onClick={handleExportPDF} className="gap-2">
-                    <Download size={14} /> Export PDF
+                    <Printer size={14} /> Print / Save PDF
                   </Button>
                 )}
               </div>
@@ -1630,24 +1570,24 @@ export default function ReportsPage() {
 
         {/* Error */}
         {error && (
-          <div className="rounded-xl border border-inkomoko-danger/30 bg-inkomoko-danger/5 px-4 py-3 text-sm text-inkomoko-danger">
+          <div className="no-print rounded-xl border border-inkomoko-danger/30 bg-inkomoko-danger/5 px-4 py-3 text-sm text-inkomoko-danger">
             {error}
           </div>
         )}
 
         {/* Empty state */}
         {!loading && !report && !error && (
-          <div className="rounded-2xl border-2 border-dashed border-inkomoko-border bg-inkomoko-bg/40 px-6 py-16 text-center">
+          <div className="no-print rounded-2xl border-2 border-dashed border-inkomoko-border bg-inkomoko-bg/40 px-6 py-16 text-center">
             <FileText size={48} className="mx-auto mb-3 text-inkomoko-muted/50" />
             <p className="text-inkomoko-muted text-sm">
-              Select a report type and click <strong>Generate Report</strong> to render a publication-ready report.
+              Select a report type above to generate a publication-ready report.
             </p>
           </div>
         )}
 
         {/* Loading skeleton */}
         {loading && (
-          <div className="space-y-4">
+          <div className="no-print space-y-4">
             {[1, 2, 3].map((i) => (
               <div key={i} className="rounded-2xl border border-inkomoko-border bg-white p-6 animate-pulse">
                 <div className="h-4 bg-inkomoko-bg rounded w-1/3 mb-4" />

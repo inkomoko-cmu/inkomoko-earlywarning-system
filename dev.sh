@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Inkomoko Early Warning System - Development Server Script
-# Runs both backend (FastAPI) and frontend (Next.js) concurrently
+# Runs backend (FastAPI) and frontend (Next.js) concurrently
 
 set -e
 
@@ -20,43 +20,70 @@ echo -e "${BLUE}╔════════════════════�
 echo -e "${BLUE}║  Inkomoko Early Warning System - Development Server       ║${NC}"
 echo -e "${BLUE}╚════════════════════════════════════════════════════════════╝${NC}"
 
+LOG_DIR="$PROJECT_ROOT/.logs"
+mkdir -p "$LOG_DIR"
+BACKEND_LOG="$LOG_DIR/backend.log"
+FRONTEND_LOG="$LOG_DIR/frontend.log"
+
+PIDS=()
+
 # Cleanup function
 cleanup() {
     echo -e "\n${YELLOW}Stopping servers...${NC}"
-    kill $BACKEND_PID $FRONTEND_PID 2>/dev/null || true
+    for pid in "${PIDS[@]}"; do
+        kill "$pid" 2>/dev/null || true
+    done
+    wait "${PIDS[@]}" 2>/dev/null || true
     echo -e "${GREEN}Servers stopped.${NC}"
     exit 0
 }
 
 # Set trap to cleanup on exit
-trap cleanup SIGINT SIGTERM
+trap cleanup SIGINT SIGTERM EXIT
 
-# Start backend
-echo -e "\n${BLUE}Starting backend server...${NC}"
+# ── Check ports ──────────────────────────────────────────────────────────────
+check_port() {
+    local port=$1 name=$2
+    local pids
+    pids=$(lsof -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null || true)
+    if [[ -n "$pids" ]]; then
+        echo -e "${YELLOW}⚠ Port $port ($name) in use — killing existing process(es)...${NC}"
+        echo "$pids" | xargs kill -9 2>/dev/null || true
+        sleep 1
+    fi
+}
+
+check_port 8000 "Backend API"
+check_port 3000 "Frontend"
+
+# ── Backend ──────────────────────────────────────────────────────────────────
+echo -e "\n${BLUE}[1/2] Starting backend (port 8000)...${NC}"
 cd "$BACKEND_DIR"
-python app/main.py > /tmp/backend.log 2>&1 &
-BACKEND_PID=$!
-echo -e "${GREEN}Backend PID: $BACKEND_PID${NC}"
-echo -e "${YELLOW}Backend logs: tail -f /tmp/backend.log${NC}"
+if [[ -f .venv/bin/activate ]]; then
+    source .venv/bin/activate
+fi
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload > "$BACKEND_LOG" 2>&1 &
+PIDS+=($!)
+echo -e "${GREEN}  PID: ${PIDS[-1]}  logs → ${YELLOW}tail -f $BACKEND_LOG${NC}"
 
-# Wait a bit for backend to start
-sleep 3
+# Wait a moment for API to bind
+sleep 2
 
-# Start frontend
-echo -e "\n${BLUE}Starting frontend server...${NC}"
+# ── Frontend ─────────────────────────────────────────────────────────────────
+echo -e "${BLUE}[2/2] Starting frontend (port 3000)...${NC}"
 cd "$FRONTEND_DIR"
-npm run dev > /tmp/frontend.log 2>&1 &
-FRONTEND_PID=$!
-echo -e "${GREEN}Frontend PID: $FRONTEND_PID${NC}"
-echo -e "${YELLOW}Frontend logs: tail -f /tmp/frontend.log${NC}"
+npm run dev > "$FRONTEND_LOG" 2>&1 &
+PIDS+=($!)
+echo -e "${GREEN}  PID: ${PIDS[-1]}  logs → ${YELLOW}tail -f $FRONTEND_LOG${NC}"
 
-# Display URLs
-echo -e "\n${GREEN}✓ Both servers are running!${NC}"
+# ── Summary ──────────────────────────────────────────────────────────────────
+echo -e "\n${GREEN}✓ All servers starting!${NC}"
 echo -e "\n${BLUE}URLs:${NC}"
-echo -e "  Frontend:  ${GREEN}http://localhost:3000${NC}"
-echo -e "  Backend:   ${GREEN}http://localhost:8000${NC}"
-echo -e "  API Docs:  ${GREEN}http://localhost:8000/docs${NC}"
-echo -e "\n${YELLOW}Press Ctrl+C to stop both servers${NC}\n"
+echo -e "  Frontend:    ${GREEN}http://localhost:3000${NC}"
+echo -e "  Backend API: ${GREEN}http://localhost:8000${NC}"
+echo -e "  API Docs:    ${GREEN}http://localhost:8000/docs${NC}"
+echo -e "\n${YELLOW}Press Ctrl+C to stop all servers${NC}\n"
 
-# Wait for both processes
-wait $BACKEND_PID $FRONTEND_PID
+# Wait for any child to exit
+wait -n "${PIDS[@]}" 2>/dev/null || true
+echo -e "${RED}A server exited unexpectedly — shutting down.${NC}"

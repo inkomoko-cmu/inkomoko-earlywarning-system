@@ -1,8 +1,9 @@
-"""CSV upload endpoints for data and user bulk-import."""
+"""CSV / JSON upload endpoints for data and user bulk-import."""
 
 from __future__ import annotations
 
 import io
+import json
 import re
 import uuid
 from datetime import datetime, timezone
@@ -122,6 +123,57 @@ def _parse_csv(raw_bytes: bytes) -> tuple[list[str], list[dict[str, str]]]:
     return norm_cols, rows
 
 
+def _parse_json(raw_bytes: bytes) -> tuple[list[str], list[dict[str, str]]]:
+    """Parse JSON bytes (expected: array of objects). Returns (columns, rows_as_dicts)."""
+    text_content: str | None = None
+    for enc in ("utf-8-sig", "utf-8", "latin-1", "cp1252"):
+        try:
+            text_content = raw_bytes.decode(enc)
+            break
+        except UnicodeDecodeError:
+            continue
+    if text_content is None:
+        text_content = raw_bytes.decode("utf-8", errors="replace")
+
+    try:
+        data = json.loads(text_content)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid JSON: {exc}")
+
+    if not isinstance(data, list):
+        raise ValueError("JSON must be an array of objects, e.g. [{...}, ...]")
+    if not data:
+        raise ValueError("JSON array is empty")
+    if not all(isinstance(item, dict) for item in data):
+        raise ValueError("Every element in the JSON array must be an object")
+
+    # Collect all keys across all objects (preserving first-seen order)
+    raw_cols: list[str] = []
+    seen: set[str] = set()
+    for item in data:
+        for k in item:
+            if k not in seen:
+                raw_cols.append(k)
+                seen.add(k)
+
+    norm_cols = _normalize_columns(raw_cols)
+    col_map = dict(zip(raw_cols, norm_cols))
+
+    rows: list[dict[str, str]] = []
+    for item in data:
+        rows.append({col_map[k]: str(v) if v is not None else "" for k, v in item.items() if k in col_map})
+    return norm_cols, rows
+
+
+def _detect_and_parse(
+    raw_bytes: bytes, filename: str | None
+) -> tuple[list[str], list[dict[str, str]]]:
+    """Route to the correct parser based on file extension."""
+    if filename and filename.lower().endswith(".json"):
+        return _parse_json(raw_bytes)
+    return _parse_csv(raw_bytes)
+
+
 def _validate(
     columns: list[str],
     rows: list[dict[str, str]],
@@ -189,6 +241,48 @@ def _validate(
 
 
 # ---------------------------------------------------------------------------
+# Preview (validate + return sample rows, no DB write)
+# ---------------------------------------------------------------------------
+
+@router.post("/{dataset_type}/preview")
+async def preview_dataset(
+    dataset_type: str,
+    file: UploadFile = File(...),
+    _admin=Depends(require_roles("admin")),
+):
+    if dataset_type not in DATASET_META:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid dataset type '{dataset_type}'. Must be one of: {', '.join(DATASET_META)}",
+        )
+
+    meta = DATASET_META[dataset_type]
+
+    raw = await file.read()
+    if len(raw) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=413, detail="File exceeds 50 MB limit")
+    if not raw.strip():
+        raise HTTPException(status_code=400, detail="File is empty")
+
+    try:
+        columns, rows = _detect_and_parse(raw, file.filename)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    if not rows:
+        raise HTTPException(status_code=400, detail="File contains a header but no data rows")
+
+    errors = _validate(columns, rows, meta)
+
+    return {
+        "columns": columns,
+        "preview_rows": rows[:50],
+        "total_rows": len(rows),
+        "validation_errors": errors,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Dataset upload (baseline / endline / investment)
 # ---------------------------------------------------------------------------
 
@@ -216,12 +310,12 @@ async def upload_dataset(
 
     # Parse
     try:
-        columns, rows = _parse_csv(raw)
+        columns, rows = _detect_and_parse(raw, file.filename)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
     if not rows:
-        raise HTTPException(status_code=400, detail="CSV contains a header but no data rows")
+        raise HTTPException(status_code=400, detail="File contains a header but no data rows")
 
     # Validate
     errors = _validate(columns, rows, meta)
